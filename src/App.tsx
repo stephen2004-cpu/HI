@@ -1,0 +1,707 @@
+import { useEffect, useRef, useState } from 'react';
+import {
+  ArrowUpRight,
+  Bell,
+  BookOpen,
+  Check,
+  ChevronRight,
+  Clock3,
+  Coffee,
+  Expand,
+  Headphones,
+  Hourglass,
+  Maximize2,
+  Pause,
+  Play,
+  RotateCcw,
+  SkipForward,
+  Square,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react';
+import {
+  advance,
+  begin,
+  current,
+  duration,
+  formatClock,
+  record,
+  remaining,
+  uid,
+  type Mode,
+  type Run,
+  type Snapshot,
+} from './engine';
+import { load, save, type Saved } from './storage';
+import { playSound, unlockAudio } from './audio';
+import SessionEditor from './components/SessionEditor';
+import History from './components/History';
+const presets = [15, 30, 60, 120, 300, 600, 900, 1500, 1800, 2700];
+export default function App() {
+  const [data, setData] = useState<Saved>(load);
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const [mode, setMode] = useState<Mode>(
+    () => data.snapshot.run?.mode || 'timer',
+  );
+  const [now, setNow] = useState(Date.now());
+  const [notice, setNotice] = useState('');
+  const [storageError, setStorageError] = useState(false);
+  const [confirm, setConfirm] = useState<'stop' | 'clear' | null>(null);
+  const [notifications, setNotifications] = useState(false);
+  const [focus, setFocus] = useState(false);
+  const panel = useRef<HTMLElement>(null);
+  const lastSaved = useRef('');
+  const run = data.snapshot.run;
+  const s = data.settings;
+  const active = run ? current(run) : null;
+  const seconds = run
+    ? remaining(run, now) / 1000
+    : mode === 'study'
+      ? s.sessions[0].seconds
+      : s.hours * 3600 + s.minutes * 60 + s.seconds;
+  const [hh, mm, ss] = formatClock(seconds);
+  const total = run ? current(run).seconds : seconds;
+  const progress = run ? Math.min(100, (seconds / total) * 100) : 100;
+  const update = (next: Saved) => {
+    dataRef.current = next;
+    setData(next);
+  };
+  const settings = (patch: Partial<Saved['settings']>) =>
+    update({
+      ...dataRef.current,
+      settings: { ...dataRef.current.settings, ...patch },
+    });
+  const snap = (snapshot: Snapshot) => update({ ...dataRef.current, snapshot });
+  const announce = (message: string) => setNotice(message);
+  useEffect(() => {
+    const tick = () => {
+      const time = Date.now();
+      setNow(time);
+      const d = dataRef.current;
+      const result = advance(d.snapshot, time);
+      if (result.completed.length) {
+        const next = { ...d, snapshot: result.snapshot };
+        dataRef.current = next;
+        setData(next);
+        const finished = result.completed[result.completed.length - 1];
+        playSound(finished.sound, d.settings.muted ? 0 : d.settings.volume);
+        const nextRun = result.snapshot.run;
+        const message = nextRun
+          ? `Đã hoàn thành ${finished.name}. Tiếp theo: ${current(nextRun).name}.`
+          : `Đã hoàn thành ${finished.name}. Bạn đã làm rất tốt!`;
+        setNotice(
+          result.omitted
+            ? `${message} Một số vòng lặp khi vắng mặt đã được bỏ qua.`
+            : message,
+        );
+        if (
+          notifications &&
+          'Notification' in window &&
+          Notification.permission === 'granted'
+        ) {
+          try {
+            new Notification('LBD Focus', { body: message });
+          } catch {
+            /* In-page announcement remains available. */
+          }
+        }
+      }
+    };
+    tick();
+    const id = setInterval(tick, 200);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [notifications]);
+  useEffect(() => {
+    const json = JSON.stringify(data);
+    if (json !== lastSaved.current) {
+      setStorageError(!save(data));
+      lastSaved.current = json;
+    }
+  }, [data]);
+  useEffect(() => {
+    const listener = () => setFocus(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', listener);
+    return () => document.removeEventListener('fullscreenchange', listener);
+  }, []);
+  useEffect(() => {
+    document.title = run
+      ? `${hh}:${mm}:${ss} · LBD Focus`
+      : 'LBD Focus — Tập trung vào điều quan trọng';
+  }, [hh, mm, ss, !!run]);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(''), 9000);
+    return () => clearTimeout(t);
+  }, [notice]);
+  // Actions reconcile an expired deadline before applying user input.
+  const fresh = () => {
+    const d = dataRef.current;
+    const next = { ...d, snapshot: advance(d.snapshot, Date.now()).snapshot };
+    update(next);
+    return next;
+  };
+  const start = async () => {
+    const d = dataRef.current;
+    const secs =
+      d.settings.hours * 3600 + d.settings.minutes * 60 + d.settings.seconds;
+    if (mode === 'timer' && secs <= 0) {
+      announce('Hãy đặt thời gian lớn hơn 0 giây.');
+      return;
+    }
+    const sessions =
+      mode === 'timer'
+        ? [
+            {
+              id: uid(),
+              name: d.settings.name.trim() || 'Thời gian tập trung',
+              kind: 'study' as const,
+              seconds: secs,
+              sound: 'bell' as const,
+            },
+          ]
+        : d.settings.sessions.map((x, i) => ({
+            ...x,
+            name: x.name.trim() || `Phiên ${i + 1}`,
+          }));
+    snap({
+      run: begin(
+        mode,
+        sessions,
+        mode === 'study' && d.settings.loop,
+        Date.now(),
+      ),
+      history: d.snapshot.history,
+    });
+    if (!(await unlockAudio()))
+      announce(
+        'Chưa kích hoạt được âm thanh. Bạn vẫn nhận thông báo trên trang.',
+      );
+  };
+  const pause = () => {
+    const d = fresh();
+    const r = d.snapshot.run;
+    if (!r) return;
+    const time = Date.now();
+    snap({
+      ...d.snapshot,
+      run:
+        r.status === 'running'
+          ? { ...r, status: 'paused', remaining: remaining(r, time) }
+          : { ...r, status: 'running', deadline: time + r.remaining },
+    });
+    if (r.status === 'paused') void unlockAudio();
+  };
+  const stop = () => {
+    const d = fresh();
+    const r = d.snapshot.run;
+    if (r)
+      snap({
+        run: null,
+        history: [
+          record(r, Date.now(), 'stopped'),
+          ...d.snapshot.history,
+        ].slice(0, 1000),
+      });
+    setConfirm(null);
+  };
+  const restart = () => {
+    const d = fresh();
+    const r = d.snapshot.run;
+    if (!r) return;
+    const time = Date.now();
+    snap({
+      history: [record(r, time, 'stopped'), ...d.snapshot.history].slice(
+        0,
+        1000,
+      ),
+      run: {
+        ...r,
+        remaining: current(r).seconds * 1000,
+        deadline: time + current(r).seconds * 1000,
+        started: time,
+        status: 'running',
+      },
+    });
+    void unlockAudio();
+  };
+  const skip = () => {
+    const d = fresh();
+    const r = d.snapshot.run;
+    if (!r) return;
+    const time = Date.now();
+    let next: Run | null = null;
+    if (r.index < r.sessions.length - 1 || r.loop) {
+      const index = (r.index + 1) % r.sessions.length;
+      const ms = r.sessions[index].seconds * 1000;
+      next = { ...r, index, remaining: ms, deadline: time + ms, started: time };
+    }
+    snap({
+      run: next,
+      history: [record(r, time, 'stopped'), ...d.snapshot.history].slice(
+        0,
+        1000,
+      ),
+    });
+    announce(
+      next
+        ? `Đã chuyển sang ${current(next).name}.`
+        : 'Đã kết thúc chuỗi học tập.',
+    );
+  };
+  const fullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (panel.current?.requestFullscreen)
+        await panel.current.requestFullscreen();
+      else setFocus(!focus);
+    } catch {
+      setFocus(!focus);
+    }
+  };
+  const notify = async () => {
+    if (!('Notification' in window)) {
+      announce(
+        'Trình duyệt này chưa hỗ trợ thông báo hệ thống. Thông báo trên trang luôn bật.',
+      );
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotifications(permission === 'granted');
+      announce(
+        permission === 'granted'
+          ? 'Đã bật thông báo cho lần sử dụng này.'
+          : 'Thông báo trên trang vẫn hoạt động. Bạn có thể cấp quyền trong cài đặt trình duyệt.',
+      );
+    } catch {
+      announce(
+        'Không thể bật thông báo hệ thống. Thông báo trên trang vẫn hoạt động.',
+      );
+    }
+  };
+  return (
+    <div className="app-shell">
+      <header className="header">
+        <a href="#" className="wordmark" aria-label="LBD Focus trang chủ">
+          <span className="brand-symbol">
+            <Hourglass size={20} />
+          </span>
+          <span>
+            LBD<span className="brand-light"> FOCUS</span>
+            <small>BY LỘC BOY ĐẢO</small>
+          </span>
+        </a>
+        <div className="header-right">
+          <span className="local-badge">
+            <span />
+            Không gian của riêng bạn
+          </span>
+          <button
+            className={`icon-button ${notifications ? 'gold-text' : ''}`}
+            aria-label="Bật thông báo hệ thống"
+            onClick={notify}
+          >
+            <Bell size={18} />
+          </button>
+        </div>
+      </header>
+      <main>
+        <section className="intro">
+          <div className="eyebrow">
+            <span /> ÍT XAO NHÃNG. NHIỀU GIÁ TRỊ.
+          </div>
+          <h1>
+            Dành thời gian cho
+            <br />
+            <em>điều quan trọng.</em>
+          </h1>
+          <p>
+            Một không gian yên tĩnh. Một mục tiêu rõ ràng.
+            <br className="mobile-break" /> Bắt đầu nhịp tập trung của riêng
+            bạn.
+          </p>
+        </section>
+        <div className="mode-tabs" role="tablist" aria-label="Chế độ tập trung">
+          <button
+            role="tab"
+            aria-selected={mode === 'timer'}
+            className={mode === 'timer' ? 'selected' : ''}
+            disabled={!!run && run.mode !== 'timer'}
+            onClick={() => setMode('timer')}
+          >
+            <Clock3 size={17} />
+            Đồng hồ đếm ngược
+          </button>
+          <button
+            role="tab"
+            aria-selected={mode === 'study'}
+            className={mode === 'study' ? 'selected' : ''}
+            disabled={!!run && run.mode !== 'study'}
+            onClick={() => setMode('study')}
+          >
+            <BookOpen size={17} />
+            Chế độ học tập
+          </button>
+        </div>
+        <section
+          ref={panel}
+          className={`timer-card ${focus ? 'focus-view' : ''}`}
+          aria-label={mode === 'timer' ? 'Đồng hồ đếm ngược' : 'Chế độ học tập'}
+        >
+          <div className="card-topline">
+            <span className="card-label">
+              <span
+                className={`live-dot ${run?.status === 'running' ? 'running' : ''}`}
+              />
+              {run
+                ? run.status === 'paused'
+                  ? 'ĐANG TẠM DỪNG'
+                  : 'ĐANG TẬP TRUNG'
+                : mode === 'timer'
+                  ? 'KHOẢNG THỜI GIAN CỦA BẠN'
+                  : 'NHỊP HỌC CỦA BẠN'}
+            </span>
+            <button
+              className="icon-button"
+              aria-label={focus ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
+              onClick={fullscreen}
+            >
+              {focus ? <X size={17} /> : <Maximize2 size={17} />}
+            </button>
+          </div>
+          <div className="timer-center">
+            {run ? (
+              <div className="session-name-display">
+                {run.mode === 'study' &&
+                  (active?.kind === 'break' ? (
+                    <Coffee size={15} />
+                  ) : (
+                    <BookOpen size={15} />
+                  ))}
+                {active?.name}
+              </div>
+            ) : (
+              <div className="session-name-display">
+                {mode === 'study'
+                  ? 'Sẵn sàng cho một buổi học hiệu quả'
+                  : s.name || 'Thời gian tập trung'}
+              </div>
+            )}
+            <div
+              className="clock"
+              role="timer"
+              aria-label={`${hh} giờ ${mm} phút ${ss} giây`}
+            >
+              <span>{hh}</span>
+              <span className="clock-colon">:</span>
+              <span>{mm}</span>
+              <div className="clock-seconds">
+                <span>{ss}</span>
+                <small>GIÂY</small>
+              </div>
+            </div>
+            <div className="clock-units">
+              <span>GIỜ</span>
+              <span>PHÚT</span>
+            </div>
+            <div
+              className="progress-track"
+              role="progressbar"
+              aria-label="Thời gian còn lại"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progress)}
+            >
+              <div style={{ width: `${progress}%` }} />
+            </div>
+            <div className="progress-caption">
+              <span>
+                {run
+                  ? run.status === 'paused'
+                    ? 'Hít thở một chút, rồi tiếp tục nhé.'
+                    : 'Chỉ một việc, ngay lúc này.'
+                  : 'Mỗi hành trình bắt đầu từ một khoảnh khắc.'}
+              </span>
+              {run?.mode === 'study' && (
+                <strong>
+                  Phiên {run.index + 1} / {run.sessions.length}
+                </strong>
+              )}
+            </div>
+            <div className="timer-controls">
+              {!run ? (
+                <button className="button primary" onClick={start}>
+                  <Play size={17} fill="currentColor" />{' '}
+                  {mode === 'timer' ? 'Bắt đầu tập trung' : 'Bắt đầu chuỗi học'}{' '}
+                  <ChevronRight size={16} />
+                </button>
+              ) : (
+                <>
+                  <button className="button primary" onClick={pause}>
+                    {run.status === 'running' ? (
+                      <Pause size={17} />
+                    ) : (
+                      <Play size={17} />
+                    )}{' '}
+                    {run.status === 'running' ? 'Tạm dừng' : 'Tiếp tục'}
+                  </button>
+                  {run.mode === 'timer' ? (
+                    <button
+                      className="button outline"
+                      aria-label="Khởi động lại"
+                      onClick={restart}
+                    >
+                      <RotateCcw size={17} />
+                      <span>Khởi động lại</span>
+                    </button>
+                  ) : (
+                    <button
+                      className="button outline"
+                      aria-label="Bỏ qua"
+                      onClick={skip}
+                    >
+                      <SkipForward size={17} />
+                      <span>Bỏ qua</span>
+                    </button>
+                  )}
+                  <button
+                    className="icon-button stop-button"
+                    aria-label="Kết thúc phiên"
+                    onClick={() => {
+                      if (document.fullscreenElement)
+                        void document.exitFullscreen();
+                      setFocus(false);
+                      setConfirm('stop');
+                    }}
+                  >
+                    <Square size={17} />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+          {!run && mode === 'timer' && (
+            <div className="timer-settings">
+              <div className="settings-grid">
+                <label className="name-field">
+                  <span>TÊN PHIÊN</span>
+                  <input
+                    value={s.name}
+                    maxLength={80}
+                    placeholder="Bạn muốn tập trung vào điều gì?"
+                    onChange={(e) => settings({ name: e.target.value })}
+                  />
+                </label>
+                <div className="time-field">
+                  <span>THỜI GIAN</span>
+                  <div className="time-inputs">
+                    {(['hours', 'minutes', 'seconds'] as const).map(
+                      (key, i) => (
+                        <label key={key}>
+                          <input
+                            aria-label={['Giờ', 'Phút', 'Giây'][i]}
+                            type="number"
+                            min="0"
+                            max={i === 0 ? 99 : 59}
+                            value={s[key]}
+                            onChange={(e) =>
+                              settings({
+                                [key]: Math.max(
+                                  0,
+                                  Math.min(
+                                    i === 0 ? 99 : 59,
+                                    Math.floor(Number(e.target.value)),
+                                  ),
+                                ),
+                              })
+                            }
+                          />
+                          <span>{['giờ', 'phút', 'giây'][i]}</span>
+                        </label>
+                      ),
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="presets-label">
+                CHỌN NHANH <span>Một nhịp nhỏ cho ngày dài</span>
+              </div>
+              <div className="presets">
+                {presets.map((sec) => (
+                  <button
+                    key={sec}
+                    className={seconds === sec ? 'active' : ''}
+                    onClick={() =>
+                      settings({
+                        hours: 0,
+                        minutes: Math.floor(sec / 60),
+                        seconds: sec % 60,
+                      })
+                    }
+                  >
+                    {sec < 60 ? `${sec} giây` : `${sec / 60} phút`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="card-bottom">
+            <div className="sound-control">
+              <button
+                className="icon-button"
+                aria-label={s.muted ? 'Bật âm thanh' : 'Tắt âm thanh'}
+                onClick={() => settings({ muted: !s.muted })}
+              >
+                {s.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              </button>
+              <input
+                aria-label="Âm lượng"
+                type="range"
+                min="0"
+                max="100"
+                value={s.volume}
+                onChange={(e) => settings({ volume: Number(e.target.value) })}
+              />
+              <span>{s.muted ? 'Tắt tiếng' : `${s.volume}%`}</span>
+              <button
+                className="text-button sound-test"
+                onClick={async () => {
+                  if (await unlockAudio())
+                    playSound('bell', s.muted ? 0 : s.volume);
+                  else announce('Trình duyệt chưa cho phép phát âm thanh.');
+                }}
+              >
+                Nghe thử
+              </button>
+            </div>
+            <span className="sound-caption">
+              <Headphones size={13} /> Một chút yên tĩnh, nhiều hơn tập trung
+            </span>
+          </div>
+        </section>
+        {mode === 'study' && (
+          <SessionEditor
+            sessions={s.sessions}
+            disabled={!!run}
+            onChange={(sessions) => settings({ sessions })}
+            loop={s.loop}
+            onLoop={(loop) => settings({ loop })}
+          />
+        )}
+        <div className="under-card">
+          <span>
+            <Check size={13} /> Tự động lưu trên thiết bị
+          </span>
+          <span>
+            <Expand size={13} /> Không gian tối giản cho tâm trí
+          </span>
+        </div>
+        <History
+          history={data.snapshot.history}
+          onClear={() => setConfirm('clear')}
+        />
+        <div className="quiet-quote">
+          <span>“</span>
+          <p>Không cần làm tất cả. Chỉ cần trọn vẹn với điều đang làm.</p>
+          <small>LỘC BOY ĐẢO</small>
+        </div>
+      </main>
+      <footer>
+        <a className="footer-brand" href="#">
+          LBD FOCUS <span>© {new Date().getFullYear()} Lộc Boy Đảo</span>
+        </a>
+        <p>
+          Được tạo nên cho những phút giây có ý nghĩa.
+          <ArrowUpRight size={13} />
+        </p>
+      </footer>
+      <div className="browser-note">
+        Giữ trang mở để nhận âm báo. Trình duyệt đóng hoặc thiết bị ngủ có thể
+        làm gián đoạn thông báo.
+      </div>
+      {notice && (
+        <div className="toast" role="status">
+          <span className="toast-dot" />
+          {notice}
+          <button
+            className="icon-button"
+            aria-label="Đóng thông báo"
+            onClick={() => setNotice('')}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+      {storageError && (
+        <div className="storage-error" role="alert">
+          Không lưu được dữ liệu. Kiểm tra dung lượng hoặc quyền lưu trữ của
+          trình duyệt; dữ liệu hiện tại chỉ giữ trong lần mở này.
+        </div>
+      )}
+      {confirm && (
+        <div className="modal-backdrop" onClick={() => setConfirm(null)}>
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="dialog-title"
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setConfirm(null);
+              if (e.key === 'Tab') {
+                const buttons = e.currentTarget.querySelectorAll('button');
+                const first = buttons[0],
+                  last = buttons[buttons.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                  e.preventDefault();
+                  last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                  e.preventDefault();
+                  first.focus();
+                }
+              }
+            }}
+          >
+            <h2 id="dialog-title">
+              {confirm === 'clear'
+                ? 'Xóa toàn bộ lịch sử?'
+                : 'Kết thúc phiên hiện tại?'}
+            </h2>
+            <p>
+              {confirm === 'clear'
+                ? 'Thao tác này không thể hoàn tác. Bạn có thể xuất CSV để giữ lại trước khi xóa.'
+                : 'Phiên hiện tại sẽ được lưu vào lịch sử với trạng thái dừng sớm.'}
+            </p>
+            <div className="modal-actions">
+              <button
+                autoFocus
+                className="button outline"
+                onClick={() => setConfirm(null)}
+              >
+                Quay lại
+              </button>
+              <button
+                className="button primary"
+                onClick={() => {
+                  if (confirm === 'stop') stop();
+                  else {
+                    snap({ ...dataRef.current.snapshot, history: [] });
+                    setConfirm(null);
+                  }
+                }}
+              >
+                {confirm === 'clear' ? 'Xóa lịch sử' : 'Kết thúc'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
