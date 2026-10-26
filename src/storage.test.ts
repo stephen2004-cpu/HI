@@ -44,3 +44,17 @@ describe('Persisted session safety', () => {
     expect(save(initial)).toBe(false);
   });
 });
+
+it('imports legacy data without ever writing the legacy key', () => {
+  const legacy = JSON.stringify(initial);
+  const values = new Map([['lbd-focus-v1', legacy]]);
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+  });
+  const data = load();
+  data.settings.name = 'V2';
+  expect(save(data)).toBe(true);
+  expect(values.get('lbd-focus-v1')).toBe(legacy);
+  expect(load().settings.name).toBe('V2');
+});

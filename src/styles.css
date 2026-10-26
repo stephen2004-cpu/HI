@@ -1510,3 +1510,87 @@ footer p {
     scroll-behavior: auto !important;
   }
 }
+
+.task-board {
+  margin: 2rem 0 3rem;
+}
+.task-board > p,
+.quadrant > p {
+  color: var(--muted);
+}
+.task-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+.task-form label,
+.task-card > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.task-form input:not([type='color']),
+.task-form textarea,
+.task-board select {
+  background: var(--surface);
+  color: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.65rem;
+  max-width: 100%;
+}
+.task-form textarea {
+  min-height: 44px;
+}
+.eisenhower-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.quadrant {
+  border: 1px solid var(--line);
+  border-top: 4px solid;
+  border-radius: 12px;
+  padding: 1rem;
+  min-width: 0;
+}
+.task-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 5px solid;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+  overflow-wrap: anywhere;
+}
+.task-card > label:first-child {
+  flex-direction: row;
+  align-items: center;
+}
+.task-card input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.task-done > label:first-child span {
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+.task-notes {
+  white-space: pre-wrap;
+}
+.task-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+@media (max-width: 700px) {
+  .eisenhower-grid {
+    grid-template-columns: 1fr;
+  }
+  .task-form label {
+    width: 100%;
+  }
+}

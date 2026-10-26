@@ -104,3 +104,24 @@ Nếu repository đã có thay đổi từ người khác, kiểm tra/fetch và 
 5. Mở domain HTTPS được cấp, chạy một phiên 15 giây, kiểm tra âm thanh, khôi phục sau tải lại và CSV trên thiết bị của bạn.
 
 Đây là ứng dụng tĩnh một trang, không có client-side routing nên không cần cấu hình rewrite. Có thể triển khai bằng gói miễn phí phù hợp điều kiện sử dụng của bạn; ứng dụng không phụ thuộc API Vercel. Việc triển khai/public URL chưa được thực hiện trong workspace này.
+
+## LBD Focus V2 — giai đoạn 1
+
+Task hỗ trợ tạo, sửa, xóa có xác nhận, hoàn thành và khôi phục sau tải lại.
+Ma trận Eisenhower gồm Làm ngay (xanh lá), Lên lịch (vàng), Ủy quyền
+(xanh dương), Loại bỏ (hồng). Kéo thả giữa các nhóm hoặc dùng danh sách
+Chuyển nhóm trên từng thẻ (phù hợp bàn phím và thiết bị cảm ứng). Màu riêng
+chỉ đổi viền thẻ, không đổi nhóm; Dùng màu nhóm khôi phục màu mặc định.
+
+V2 chỉ đọc key `lbd-focus-v1` khi chưa có `lbd-focus-v2-timer`, sau đó ghi
+thiết lập/timer/lịch sử vào `lbd-focus-v2-timer`. Key cũ không bị ghi đè hoặc
+xóa. Task nằm riêng ở `lbd-focus-v2-tasks`. Không chuyển domain/origin nếu
+muốn tiếp tục dùng dữ liệu trình duyệt hiện tại. Dữ liệu cũ giữ nguyên để
+quay lại V1, nhưng các phiên tạo mới trong V2 không được đồng bộ về V1.
+Nếu dữ liệu Task hỏng hoặc không đọc được, bảng khóa ghi để giữ nguyên dữ
+liệu gốc; nếu không ghi được, báo lỗi và giữ nội dung nhập để thử lại.
+Vẫn nên dùng một tab chỉnh sửa để tránh ghi đè giữa nhiều tab.
+
+Calendar, liên kết Task–Timer, Planned/Actual Time và logo mới chưa thuộc
+bản giai đoạn 1. Kiểm thử trình duyệt dùng Chromium desktop và mobile giả
+lập; kéo thả cảm ứng trên thiết bị thật cần kiểm tra thủ công.

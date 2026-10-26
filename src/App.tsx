@@ -37,6 +37,7 @@ import { load, save, type Saved } from './storage';
 import { playSound, unlockAudio } from './audio';
 import SessionEditor from './components/SessionEditor';
 import History from './components/History';
+import TaskBoard from './components/TaskBoard';
 const presets = [15, 30, 60, 120, 300, 600, 900, 1500, 1800, 2700];
 export default function App() {
   const [data, setData] = useState<Saved>(load);
@@ -312,6 +313,7 @@ export default function App() {
         </div>
       </header>
       <main>
+        <TaskBoard />
         <section className="intro">
           <div className="eyebrow">
             <span /> ÍT XAO NHÃNG. NHIỀU GIÁ TRỊ.

@@ -38,7 +38,9 @@ const session = (s: Session) =>
 export function load(): Saved {
   try {
     const x = JSON.parse(
-      localStorage.getItem('lbd-focus-v1') || 'null',
+      localStorage.getItem('lbd-focus-v2-timer') ??
+        localStorage.getItem('lbd-focus-v1') ??
+        'null',
     ) as Saved;
     if (!x || x.version !== 1) return structuredClone(initial);
     const s = x.settings;
@@ -95,7 +97,7 @@ export function load(): Saved {
 }
 export function save(value: Saved): boolean {
   try {
-    localStorage.setItem('lbd-focus-v1', JSON.stringify(value));
+    localStorage.setItem('lbd-focus-v2-timer', JSON.stringify(value));
     return true;
   } catch {
     return false;

@@ -117,9 +117,9 @@ test('recovers elapsed countdown on reload and renders without horizontal overfl
   await page.getByRole('button', { name: '15 giây', exact: true }).click();
   await page.getByRole('button', { name: 'Bắt đầu tập trung' }).click();
   await page.evaluate(() => {
-    const d = JSON.parse(localStorage.getItem('lbd-focus-v1')!);
+    const d = JSON.parse(localStorage.getItem('lbd-focus-v2-timer')!);
     d.snapshot.run.deadline = Date.now() - 1000;
-    localStorage.setItem('lbd-focus-v1', JSON.stringify(d));
+    localStorage.setItem('lbd-focus-v2-timer', JSON.stringify(d));
   });
   await page.reload();
   await expect(
