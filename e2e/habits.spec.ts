@@ -11,6 +11,9 @@ test('habits weekly/monthly logs, edit, archive and restoration remain separate 
   ).toBeVisible();
   await page.getByLabel('Tên thói quen', { exact: true }).fill('Đi bộ');
   await page
+    .getByLabel('Lịch lặp tự động trên Calendar', { exact: true })
+    .uncheck();
+  await page
     .getByRole('button', { name: 'Tạo thói quen', exact: true })
     .click();
   await page
@@ -83,6 +86,9 @@ test('explicit habit connection reuses occurrence and never checks habit when ti
 }) => {
   await page.goto('/#Thói%20quen');
   await page.getByLabel('Tên thói quen', { exact: true }).fill('Đọc');
+  await page
+    .getByLabel('Lịch lặp tự động trên Calendar', { exact: true })
+    .uncheck();
   await page
     .getByRole('button', { name: 'Tạo thói quen', exact: true })
     .click();

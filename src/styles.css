@@ -2889,3 +2889,27 @@ main:has(.linked-focus) {
     overflow-wrap: anywhere;
   }
 }
+.habit-form .habit-auto-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+}
+.habit-auto-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--gold);
+}
+.habit-schedule-help {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.habit-rule-status {
+  display: block;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--gold);
+  margin-top: 5px;
+}

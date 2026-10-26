@@ -255,3 +255,48 @@ README/ảnh gốc trong thư mục này, nên đối chiếu ảnh đã gửi t
 Header/favicon giữ nguyên cho đến khi truy cập được file logo chính thức;
 không vẽ lại từ ảnh màn hình. Preview cần kiểm tra deployment của nhánh feature,
 không chọn Promote to Production.
+
+## Habit — lịch lặp tự động
+
+Habit mới mặc định bật “Lịch lặp tự động trên Calendar”. Chọn ngày trong tuần,
+ngày bắt đầu, giờ bắt đầu và số phút. Habit cũ chưa có cấu hình lặp vẫn giữ
+chế độ đánh dấu/thao tác thủ công, không bị tự chuyển đổi. Có thể bật lịch
+cho Habit cũ bằng Sửa thói quen. Calendar tạo các lần thực hiện theo khoảng
+ngày/tuần/tháng đang xem, không giới hạn vào một tuần hay tạo trước vô hạn.
+Task và block dùng ID theo Habit + ngày để tái sử dụng sau reload/đổi tuần.
+Những block đã từng tạo có thể nằm trong cache dù không đang xem tuần đó.
+Đây là lịch trong ứng dụng, không phải tác vụ nền khi trình duyệt đóng.
+
+Quy tắc lặp lưu trong cùng bản ghi Habit, có các bản sửa theo ngày hiệu lực,
+nhật ký tạm dừng và thời điểm kết thúc. Đổi giờ/ngày/thời lượng chỉ cập nhật
+các lần tương lai chưa thực hiện và chưa chỉnh riêng. Các Task có Focus
+history hoặc phiên đang chạy và các ngày Habit đã đánh dấu giữ nguyên. Dữ
+liệu cấu hình lỗi khóa tự sinh lịch; dữ liệu gốc không bị ghi đè.
+
+Tạm dừng lịch không xóa block/Task đã tạo; các lần tương lai bị ẩn và không
+sinh thêm. Bật lại không tạo bù khoảng đã tạm dừng. Kết thúc là dừng lịch
+vĩnh viễn từ thời điểm xác nhận, không có nút bật lại chuỗi đã kết thúc; có
+thể tạo Habit mới. Các dấu Habit và lịch sử Focus vẫn được giữ. Các nút mở
+Focus/lên lịch thủ công vẫn là thao tác chủ động cho một lần thực hiện,
+không tự chạy hoặc tự đánh dấu Habit. Lưu trữ Habit cũng tạm dừng lịch;
+khôi phục chỉ tiếp tục nếu lịch đang hoạt động trước lúc lưu trữ. Nếu người
+dùng đã tạm dừng từ trước, khôi phục vẫn giữ tạm dừng; lịch đã kết thúc không
+bị bật lại.
+
+Kéo/resize/sửa block tự động tạo ngoại lệ chỉ cho lần đó. Xóa một lần từ
+Calendar lưu ngoại lệ hủy, nên lần đó không xuất hiện lại sau reload; tuần
+sau vẫn lặp bình thường. Các ngoại lệ và bản ghi ẩn được giữ trong Planner,
+báo cáo chỉ dùng block đang hiển thị/hợp lệ. Không xóa history hoặc run khi
+đổi trạng thái lịch. Nếu ghi Task thành công nhưng ghi Planner thất bại,
+Task được giữ để có thể thử lại mà không tạo trùng; đổi tuần hoặc mở lại
+Calendar sẽ thử đồng bộ khoảng xem lần nữa.
+
+Giờ lặp theo múi giờ trình duyệt. Ngày chuyển DST dùng cách xử lý ngày/giờ
+địa phương của JavaScript (giờ không tồn tại có thể được đẩy tới giờ hợp lệ);
+chưa có lựa chọn riêng cho giờ lặp do DST. Các tuần và tháng được tính bằng
+ngày lịch, không cộng cố định 24 giờ để tránh lệch ngày.
+
+Logo đính kèm vẫn chỉ có dạng ảnh hiển thị trong hội thoại; workspace không
+có tệp PNG/SVG gốc và repository sau fetch cũng không có docs/design-references.
+Header/favicon giữ logo cũ, không tạo lại logo hoặc thay bằng ảnh minh họa.
+Không có manifest PWA hay cấu hình icon màn hình chính trong repository.

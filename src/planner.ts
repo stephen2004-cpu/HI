@@ -1,6 +1,10 @@
 import type { Task } from './tasks';
 import { groups } from './tasks';
 export type TimeBlock = {
+  recurringHabitId?: string;
+  habitDate?: string;
+  habitOverride?: boolean;
+  cancelled?: boolean;
   id: string;
   taskId: string;
   title: string;
@@ -25,6 +29,13 @@ export const validBlock = (b: TimeBlock) =>
   typeof b.id === 'string' &&
   typeof b.taskId === 'string' &&
   typeof b.title === 'string' &&
+  (b.recurringHabitId === undefined ||
+    typeof b.recurringHabitId === 'string') &&
+  (b.habitDate === undefined ||
+    (typeof b.habitDate === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(b.habitDate))) &&
+  (b.cancelled === undefined || typeof b.cancelled === 'boolean') &&
+  (b.habitOverride === undefined || typeof b.habitOverride === 'boolean') &&
   Number.isFinite(b.start) &&
   Number.isFinite(b.end) &&
   b.start >= 0 &&

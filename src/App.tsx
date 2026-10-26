@@ -51,7 +51,12 @@ import {
 } from './tasks';
 import FocusDetails from './components/FocusDetails';
 import HabitTracker from './components/HabitTracker';
-import { validDate, type Habit } from './habits';
+import { validDate, loadHabits, habitOccurrence, type Habit } from './habits';
+import {
+  generateHabitRange,
+  visibleHabitBlocks,
+  applyCalendarEdit,
+} from './recurrence';
 import { loadReviews, saveReviews, type Review } from './performance';
 import { loadPlanner, savePlanner, type Planner } from './planner';
 const presets = [15, 30, 60, 120, 300, 600, 900, 1500, 1800, 2700];
@@ -70,6 +75,12 @@ export default function App() {
       ? decodeURI(location.hash.slice(1))
       : 'Lịch',
   );
+  const [habitState, setHabitState] = useState(loadHabits);
+  useEffect(() => {
+    const refresh = () => setHabitState(loadHabits());
+    window.addEventListener('lbd-habits-updated', refresh);
+    return () => window.removeEventListener('lbd-habits-updated', refresh);
+  }, []);
   const [calendarDate, setCalendarDate] = useState('');
   const [taskState, setTaskState] = useState(readTasks);
   const [plannerState] = useState(loadPlanner);
@@ -205,7 +216,11 @@ export default function App() {
     }
     if (destination === 'calendar') {
       const blockId = `habit-block:${habit.id}:${date}`,
-        start = new Date(`${date}T09:00:00`).getTime();
+        start =
+          habitOccurrence(habit, date)?.start ??
+          new Date(
+            `${date}T${habit.recurrence?.rules.at(-1)?.time ?? '09:00'}:00`,
+          ).getTime();
       if (
         !planner.blocks.some((b) => b.id === blockId) &&
         !updatePlanner({
@@ -251,6 +266,44 @@ export default function App() {
   const linkedBlock = planner.blocks.find(
     (b) => b.id === (run?.blockId || selectedBlock),
   );
+  const protectedTaskIds = new Set(
+    data.snapshot.history.flatMap((h) => (h.taskId ? [h.taskId] : [])),
+  );
+  if (run?.taskId) protectedTaskIds.add(run.taskId);
+  taskState.tasks
+    .filter((t) => t.completed)
+    .forEach((t) => protectedTaskIds.add(t.id));
+  const displayBlocks = habitState.error
+    ? planner.blocks.filter((b) => !b.cancelled)
+    : visibleHabitBlocks(
+        planner.blocks,
+        habitState.habits,
+        protectedTaskIds,
+        now,
+      );
+  const displayPlanner = { ...planner, blocks: displayBlocks };
+  const ensureHabitRange = (from: Date, to: Date) => {
+    const habits = loadHabits(),
+      tasks = readTasks();
+    if (habits.error || tasks.error || plannerState.error) return;
+    const result = generateHabitRange(
+      habits.habits,
+      planner,
+      tasks.tasks,
+      from,
+      to,
+      protectedTaskIds,
+    );
+    if (result.tasksChanged && !writeTasks(result.tasks)) {
+      setPlannerError(
+        'Không lưu được các lần Habit. Chưa cập nhật lịch; có thể thử lại mà không tạo trùng.',
+      );
+      return;
+    }
+    if (result.blocksChanged) updatePlanner(result.planner);
+  };
+  const updateCalendar = (next: Planner) =>
+    updatePlanner(applyCalendarEdit(planner, displayBlocks, next));
   const active = run ? current(run) : null;
   const seconds = run
     ? remaining(run, now) / 1000
@@ -583,9 +636,11 @@ export default function App() {
         {screen === 'Lịch' && (
           <Calendar
             tasks={taskState.tasks}
-            planner={planner}
+            planner={displayPlanner}
             initialDate={calendarDate}
-            update={updatePlanner}
+            update={updateCalendar}
+            onRange={ensureHabitRange}
+            recurrenceToken={JSON.stringify(habitState.habits)}
             focusTask={focusTask}
             locked={plannerState.error || taskState.error}
           />
@@ -595,7 +650,7 @@ export default function App() {
         {(screen === 'Tổng quan' || screen === 'Thống kê') && (
           <Insights
             tasks={taskState.tasks}
-            planner={planner}
+            planner={displayPlanner}
             snapshot={data.snapshot}
             overview={screen === 'Tổng quan'}
             go={navigate}

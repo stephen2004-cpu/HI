@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { groups, plannedTask, type Task } from '../tasks';
 import {
   addDays,
@@ -13,6 +13,8 @@ import {
 type Props = {
   tasks: Task[];
   initialDate?: string;
+  onRange?: (from: Date, to: Date) => void;
+  recurrenceToken?: string;
   planner: Planner;
   update: (p: Planner) => boolean;
   focusTask: (id: string, blockId?: string) => void;
@@ -23,6 +25,8 @@ const shortDate = (d: Date) =>
 export default function Calendar({
   tasks,
   initialDate,
+  onRange,
+  recurrenceToken,
   planner,
   update,
   focusTask,
@@ -52,6 +56,14 @@ export default function Calendar({
   const monthDays = Array.from({ length: 42 }, (_, i) =>
     addDays(weekStart(monthFirst, planner.preferences.weekStart), i),
   );
+  const rangeStart = view === 'month' ? monthDays[0] : days[0],
+    rangeEnd = addDays(
+      view === 'month' ? monthDays[41] : days[days.length - 1],
+      1,
+    );
+  useEffect(() => {
+    onRange?.(rangeStart, rangeEnd);
+  }, [+rangeStart, +rangeEnd, recurrenceToken]);
   const changeDate = (n: number) =>
     setDate(
       view === 'month'
