@@ -1997,3 +1997,238 @@ footer p {
     display: none;
   }
 }
+.task-setup {
+  flex-basis: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.task-setup textarea,
+.focus-details textarea {
+  width: 100%;
+  min-height: 90px;
+  background: var(--raised);
+  color: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  font: inherit;
+}
+.task-setup input,
+.task-setup select {
+  padding: 10px;
+}
+.task-setup > p,
+.task-setup .checklist {
+  grid-column: 1/-1;
+}
+.checklist {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.checklist-row {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0;
+  align-items: center;
+}
+.checklist-row input:not([type='checkbox']) {
+  flex: 1;
+  min-width: 0;
+  width: 60px;
+  padding: 8px;
+}
+.checklist-row button {
+  border: 1px solid var(--line);
+  background: var(--raised);
+  border-radius: 5px;
+  padding: 5px;
+}
+.focus-workspace.linked-focus {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 24px;
+}
+main:has(.linked-focus) {
+  max-width: 1450px;
+}
+.focus-timer-pane {
+  min-width: 0;
+}
+.focus-details {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px;
+  background: var(--surface);
+}
+.focus-details label {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.focus-details .checklist-row {
+  display: flex;
+}
+.focus-details .checklist-row input[type='checkbox'] {
+  width: 18px;
+}
+.focus-details select {
+  padding: 10px;
+}
+.focus-details .button {
+  margin: 6px;
+}
+.focus-details label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+}
+.focus-details label input[type='checkbox'] {
+  width: 18px;
+}
+.linked-focus .intro {
+  padding: 10px 0;
+}
+.linked-focus .intro h1 {
+  font-size: 26px;
+}
+.linked-focus .intro p {
+  display: none;
+}
+.linked-focus .time-display {
+  font-size: 60px;
+}
+.focus-plan {
+  color: var(--gold);
+  font-size: 13px;
+}
+.output-text {
+  white-space: pre-wrap;
+}
+.priority-tag {
+  display: block;
+  color: #111;
+  width: max-content;
+  max-width: 100%;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 9px;
+  border: 1px solid #1115;
+}
+.edit-block {
+  float: right;
+  border: 0;
+  background: #0002;
+  color: #111;
+  padding: 0 3px;
+}
+.schedule-warning {
+  border-left: 3px solid var(--gold);
+  padding: 10px;
+  background: var(--raised);
+}
+@media (max-width: 800px) {
+  .focus-workspace.linked-focus,
+  .task-setup {
+    grid-template-columns: 1fr;
+  }
+  .focus-details {
+    padding: 14px;
+  }
+  .task-form .task-setup label {
+    width: 100%;
+  }
+}
+.linked-focus .clock {
+  font-size: clamp(52px, 6vw, 90px);
+  letter-spacing: -4px;
+}
+.linked-focus .clock > span:not(.clock-colon) {
+  width: 1.45em;
+}
+.linked-focus .clock-colon {
+  font-size: 0.7em;
+}
+.linked-focus .clock-seconds {
+  margin-left: 8px;
+}
+.linked-focus .clock-seconds > span {
+  font-size: 26px;
+}
+.linked-focus .clock-units {
+  display: none;
+}
+.linked-focus .timer-card {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.linked-focus .card-bottom {
+  flex-wrap: wrap;
+}
+.linked-focus .mode-tabs button {
+  padding: 10px 6px;
+  font-size: 11px;
+}
+.report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+.report-filters label {
+  display: grid;
+  gap: 6px;
+}
+.report-filters input,
+.report-filters select {
+  padding: 10px;
+}
+.dashboard-hero {
+  border: 1px solid var(--gold);
+  border-radius: 16px;
+  padding: 24px;
+  background: var(--raised);
+}
+.focus-details .session-review {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 14px;
+}
+.linked-focus .settings-grid {
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.linked-focus .under-card,
+.linked-focus .quiet-quote {
+  display: none;
+}
+.linked-focus .focus-details {
+  align-self: start;
+}
+.linked-focus .workspace-history {
+  grid-column: 1/-1;
+}
+.linked-focus .intro {
+  display: none;
+}
+.linked-focus .focus-task-picker {
+  margin-bottom: 16px;
+}
+.workspace-history {
+  min-width: 0;
+  max-width: 100%;
+}
+.focus-workspace {
+  min-width: 0;
+}
+.focus-details {
+  overflow-wrap: anywhere;
+}
+.focus-details .button {
+  max-width: 100%;
+  white-space: normal;
+}

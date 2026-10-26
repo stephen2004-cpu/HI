@@ -1,13 +1,15 @@
+import TaskSetup from './TaskSetup';
 import { useState, type FormEvent } from 'react';
 import {
   groups,
+  timingOf,
   moveTask,
   readTasks,
   writeTasks,
   type Group,
   type Task,
 } from '../tasks';
-const empty = {
+const empty: Omit<Task, 'id'> = {
   title: '',
   notes: '',
   group: 'do' as Group,
@@ -42,6 +44,7 @@ export default function TaskBoard() {
     if (!draft.title.trim()) return;
     const task = {
       ...draft,
+      timing: draft.timing ?? timingOf(),
       title: draft.title.trim(),
       id: editing ?? crypto.randomUUID(),
     };
@@ -114,6 +117,10 @@ export default function TaskBoard() {
         >
           Dùng màu nhóm
         </button>
+        <TaskSetup
+          task={draft}
+          change={(patch) => setDraft({ ...draft, ...patch })}
+        />
         <button className="button primary" disabled={loaded.error}>
           {editing ? 'Lưu Task' : 'Thêm Task'}
         </button>
@@ -155,6 +162,20 @@ export default function TaskBoard() {
               </small>
             </h3>
             <p>{g.description}</p>
+            <details>
+              <summary aria-label={`Giải thích ${g.name}`}>
+                ⓘ Ý nghĩa và ví dụ
+              </summary>
+              <p>
+                {g.id === 'do'
+                  ? 'Làm trước vì quan trọng và sắp hết hạn. Ví dụ: nộp hồ sơ hôm nay.'
+                  : g.id === 'schedule'
+                    ? 'Dành thời gian trong lịch. Ví dụ: học kỹ năng cho dự án tháng sau.'
+                    : g.id === 'delegate'
+                      ? 'Nhờ người phù hợp hỗ trợ. Ví dụ: đặt lịch họp giúp nhóm.'
+                      : 'Cân nhắc bỏ qua, không tự xóa. Ví dụ: lướt mạng không có mục tiêu.'}
+              </p>
+            </details>
             {tasks
               .filter((t) => t.group === g.id)
               .map((t) => (
@@ -179,7 +200,13 @@ export default function TaskBoard() {
                         commit(
                           tasks.map((x) =>
                             x.id === t.id
-                              ? { ...x, completed: !x.completed }
+                              ? {
+                                  ...x,
+                                  completed: !x.completed,
+                                  status: !x.completed
+                                    ? ('done' as const)
+                                    : ('todo' as const),
+                                }
                               : x,
                           ),
                         )

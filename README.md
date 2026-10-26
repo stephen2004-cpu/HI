@@ -166,3 +166,50 @@ Các test bao gồm Task CRUD, điều hướng riêng, lên lịch thủ công,
 chuyển/resize block, màu, nhiều block chồng lấn/qua ngày, Planned/Actual,
 khôi phục sau reload và hồi quy hai chế độ timer trên desktop/mobile giả lập.
 Safari, cảm ứng trên thiết bị thật, âm thanh nền vẫn cần kiểm tra thủ công.
+
+## Task Setup & Focus Workspace (master specification)
+
+Task mở rộng bằng các trường tùy chọn nên dữ liệu V2 đã có không cần ghi đè
+để chuyển đổi: checklist, Expected Output, Actual Output, cấu hình Countdown/
+Study (phút Focus, số phiên, phút nghỉ), ngày giờ mong muốn và trạng thái.
+Ngày giờ trong Task chỉ gợi ý lúc mở form Calendar; thao tác lưu Time Block
+mới đặt lịch thật. Study tạo nghỉ giữa hai phiên Focus, không tự thêm nghỉ cuối.
+Màu nhóm dùng #4ADE80, #FBBF24, #60A5FA, #F472B6; màu riêng không đổi tag.
+
+Nhấn Time Block mở Focus Workspace với Task ID, Block ID, cấu hình đúng và
+không tự chạy. Nút ✎ trên lịch ngày/tuần dùng để sửa block. Calendar cảnh báo
+trùng giờ nhưng vẫn cho phép giữ lịch. Block ngắn hơn cấu hình Focus + nghỉ
+có cảnh báo trong form và Workspace. Desktop chia hai cột 40/60, mobile xếp
+Timer trước nội dung Task. Notes, checklist, Actual Output lưu độc lập và
+không reset Run. Timer độc lập và lịch sử cũ vẫn hoạt động.
+
+Run mới có focusRunId, blockId và bản chụp Planned Focus/Break/Calendar;
+record mới có Actual Focus và Actual Break, loại trừ tạm dừng. Kết quả phiên
+lưu riêng tại `lbd-focus-v2-reviews`, khóa ghi nếu dữ liệu hỏng. Mỗi runId chỉ
+có một review, lưu lại sẽ cập nhật cùng review. Task không tự hoàn thành khi
+hết giờ: người dùng xác nhận riêng. Expected Output không tự chép sang Actual
+Output. Kết quả có ghi nhận đạt Expected Output và lý do chênh lệch.
+
+Thống kê Task cộng các record duy nhất, dùng Planned của lượt đo đầu tiên
+(theo thời điểm bắt đầu) làm mốc Task. Time Block có mốc riêng từ lượt đầu
+của block. Sửa cấu hình sau đó không sửa các record cũ. Task chưa có số đo
+không được đánh giá hoàn thành sớm. Lọc ngày/tuần lấy record kết thúc trong
+khoảng chọn; block giao khoảng được cộng toàn bộ, chưa chia nhỏ qua ranh giới
+ngày. Không kết luận mức độ đạt kết quả chỉ từ thời lượng.
+
+Gợi ý là quy tắc tham khảo, không phải AI: trung vị 3–5 review cùng Task đã
+hoàn thành và được xác nhận đạt Expected Output, loại các lượt mất tập trung/
+gián đoạn khỏi tập số liệu gợi ý. Nếu lý do mới nhất là mất tập trung, không
+đề xuất tăng thời lượng bằng số. Người dùng có thể giữ thời gian hoặc áp dụng
+gợi ý (chuyển sang Countdown cho tổng thời gian gợi ý) cho lượt sau, không
+sửa lịch sử. Có thể tự nhập cấu hình khác tại Task Setup. Tính so sánh chỉ
+theo cùng Task, chưa tự phân loại loại công việc hoặc kiểm chứng độ tin cậy
+thống kê. Báo cáo vẫn giới hạn 1.000 record; review đã lưu được giữ riêng,
+không tự xóa khi xóa lịch sử. Xóa lịch sử sẽ mất khả năng tính tổng Actual
+Task/block tương ứng, nên xuất sao lưu trước khi xóa.
+
+Logo gốc hiển thị trong chat nhưng không được cung cấp thành tệp ảnh có thể
+đọc trong workspace. Theo yêu cầu giữ nguyên logo cũ và favicon; không tự
+thiết kế lại. Cần cung cấp tệp PNG/SVG gốc để thay Header/favicon/mobile icon.
+Safari/iPhone thật và ngày DST cần kiểm tra thủ công. Chưa có đồng bộ nhiều
+tab, nhập lại JSON, lịch lặp tự động hoặc backend. Không dùng Supabase.

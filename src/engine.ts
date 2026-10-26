@@ -8,6 +8,13 @@ export type Session = {
   sound: Sound;
 };
 export type RecordEntry = {
+  blockId?: string;
+  focusRunId?: string;
+  plannedFocusSeconds?: number;
+  plannedBreakSeconds?: number;
+  plannedCalendarSeconds?: number;
+  breakSeconds?: number;
+
   taskId?: string;
   actualSeconds?: number;
   id: string;
@@ -19,6 +26,13 @@ export type RecordEntry = {
   status: 'completed' | 'stopped';
 };
 export type Run = {
+  blockId?: string;
+  focusRunId?: string;
+  plannedFocusSeconds?: number;
+  plannedBreakSeconds?: number;
+  plannedCalendarSeconds?: number;
+  breakSeconds?: number;
+
   taskId?: string;
   measured?: boolean;
   mode: Mode;
@@ -59,6 +73,16 @@ export function record(
   return {
     id: uid(),
     taskId: r.taskId,
+    blockId: r.blockId,
+    focusRunId: r.focusRunId,
+    plannedFocusSeconds: r.plannedFocusSeconds,
+    plannedBreakSeconds: r.plannedBreakSeconds,
+    plannedCalendarSeconds: r.plannedCalendarSeconds,
+    breakSeconds: r.measured
+      ? s.kind === 'break'
+        ? Math.max(0, Math.min(s.seconds, s.seconds - remaining(r, end) / 1000))
+        : 0
+      : undefined,
     actualSeconds: r.measured
       ? s.kind === 'break'
         ? 0
@@ -86,6 +110,7 @@ export function begin(
   return {
     mode,
     measured: true,
+    focusRunId: uid(),
     sessions: structuredClone(sessions),
     index: 0,
     remaining: sessions[0].seconds * 1000,

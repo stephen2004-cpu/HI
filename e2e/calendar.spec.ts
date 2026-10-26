@@ -49,7 +49,10 @@ test('calendar first navigation, manual scheduling, edit, colors, restore and re
   await expect(page.locator('.day-column')).toHaveCount(1);
   await page.getByLabel('Chế độ lịch').selectOption('month');
   await expect(page.locator('.month-grid > section')).toHaveCount(42);
-  await page.locator('.month-block').click();
+  await page.getByRole('button', { name: '26/10', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Sửa lịch Lập trình lịch', exact: true })
+    .click();
   await dialog.getByLabel('Kết thúc', { exact: true }).fill('2026-10-26T08:00');
   await dialog
     .getByRole('button', { name: 'Lưu Time Block', exact: true })
@@ -64,7 +67,11 @@ test('calendar first navigation, manual scheduling, edit, colors, restore and re
     .getByRole('button', { name: 'Thống kê', exact: true })
     .click();
   await expect(
-    page.getByRole('row').filter({ hasText: 'Lập trình lịch' }),
+    page
+      .locator('table')
+      .first()
+      .getByRole('row')
+      .filter({ hasText: 'Lập trình lịch' }),
   ).toContainText('2 giờ');
   await page
     .getByRole('navigation')

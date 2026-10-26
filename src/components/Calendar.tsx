@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { Task } from '../tasks';
+import { groups, plannedTask, type Task } from '../tasks';
 import {
   addDays,
   blockColor,
@@ -14,7 +14,7 @@ type Props = {
   tasks: Task[];
   planner: Planner;
   update: (p: Planner) => boolean;
-  focusTask: (id: string) => void;
+  focusTask: (id: string, blockId?: string) => void;
   locked: boolean;
 };
 const shortDate = (d: Date) =>
@@ -56,16 +56,28 @@ export default function Calendar({
     );
   const newBlock = (
     taskId = tasks.find((t) => !t.completed)?.id ?? '',
-    start = new Date().setMinutes(0, 0, 0),
+    start?: number,
   ) => {
     setError('');
     const task = tasks.find((t) => t.id === taskId);
+    start ??= task?.plannedStart
+      ? new Date(task.plannedStart).getTime()
+      : new Date(
+          date.getFullYear(),
+          date.getMonth(),
+          date.getDate(),
+          9,
+        ).getTime();
     setDraft({
       id: crypto.randomUUID(),
       taskId,
       title: task?.title || '',
       start,
-      end: start + planner.preferences.blockMinutes * 60000,
+      end:
+        start +
+        (task?.timing
+          ? plannedTask(task).total * 1000
+          : planner.preferences.blockMinutes * 60000),
       color: '',
     });
   };
@@ -104,7 +116,11 @@ export default function Calendar({
             taskId: id,
             title: t.title,
             start: +start,
-            end: +start + planner.preferences.blockMinutes * 60000,
+            end:
+              +start +
+              (t.timing
+                ? plannedTask(t).total * 1000
+                : planner.preferences.blockMinutes * 60000),
             color: '',
           },
         ]);
@@ -180,6 +196,16 @@ export default function Calendar({
         </button>
       </aside>
       <div className="calendar-main">
+        {planner.blocks.some((a, i) =>
+          planner.blocks.some(
+            (b, j) => j > i && a.start < b.end && b.start < a.end,
+          ),
+        ) && (
+          <p role="status" className="schedule-warning">
+            Có Time Block trùng giờ. Bạn có thể giữ lịch hoặc bấm ✎ để điều
+            chỉnh.
+          </p>
+        )}
         <div className="calendar-toolbar">
           <div>
             <div className="eyebrow">KHÔNG GIAN THỜI GIAN</div>
@@ -265,8 +291,7 @@ export default function Calendar({
                       key={b.id}
                       style={{ borderLeftColor: blockColor(b, tasks) }}
                       onClick={() => {
-                        setDraft({ ...b });
-                        setError('');
+                        focusTask(b.taskId, b.id);
                       }}
                     >
                       {tasks.find((t) => t.id === b.taskId)?.title || b.title} ·{' '}
@@ -343,17 +368,42 @@ export default function Calendar({
                           e.dataTransfer.setData('application/lbd-block', b.id)
                         }
                         onClick={() => {
-                          setDraft({ ...b });
-                          setError('');
+                          focusTask(b.taskId, b.id);
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            setDraft({ ...b });
-                            setError('');
+                            focusTask(b.taskId, b.id);
                           }
                         }}
                       >
+                        <button
+                          className="edit-block"
+                          aria-label={`Sửa lịch ${b.title}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDraft({ ...b });
+                            setError('');
+                          }}
+                        >
+                          ✎
+                        </button>
+                        <span
+                          className="priority-tag"
+                          style={{
+                            background: groups.find(
+                              (g) =>
+                                g.id ===
+                                tasks.find((t) => t.id === b.taskId)?.group,
+                            )?.color,
+                          }}
+                        >
+                          {groups.find(
+                            (g) =>
+                              g.id ===
+                              tasks.find((t) => t.id === b.taskId)?.group,
+                          )?.name || 'Task đã xóa'}
+                        </span>
                         <strong>
                           {tasks.find((t) => t.id === b.taskId)?.title ||
                             b.title}
@@ -458,6 +508,19 @@ export default function Calendar({
             }}
           >
             <h2 id="block-title">Time Block</h2>
+            {draft &&
+              (draft.end - draft.start) / 1000 <
+                plannedTask(tasks.find((t) => t.id === draft.taskId)).total && (
+                <p className="schedule-warning">
+                  Block ngắn hơn tổng Focus và nghỉ đã thiết lập. Gợi ý tăng giờ
+                  kết thúc để đủ{' '}
+                  {Math.ceil(
+                    plannedTask(tasks.find((t) => t.id === draft.taskId))
+                      .total / 60,
+                  )}{' '}
+                  phút.
+                </p>
+              )}
             <p>{tasks.find((t) => t.id === draft.taskId)?.notes}</p>
             <form
               onSubmit={(e) => {
@@ -584,7 +647,7 @@ export default function Calendar({
                   className="button"
                   disabled={!tasks.some((t) => t.id === draft.taskId)}
                   onClick={() => {
-                    focusTask(draft.taskId);
+                    focusTask(draft.taskId, draft.id);
                     setDraft(null);
                   }}
                 >

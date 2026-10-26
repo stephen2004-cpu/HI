@@ -100,6 +100,22 @@ export function load(): Saved {
       if (h.actualSeconds !== undefined && !num(h.actualSeconds, h.seconds))
         delete h.actualSeconds;
     });
+    for (const entry of [...x.snapshot.history, ...(r ? [r] : [])]) {
+      for (const key of [
+        'plannedFocusSeconds',
+        'plannedBreakSeconds',
+        'plannedCalendarSeconds',
+        'breakSeconds',
+      ] as const) {
+        if (
+          entry[key] !== undefined &&
+          !num(entry[key], Number.MAX_SAFE_INTEGER)
+        )
+          delete entry[key];
+      }
+      if (typeof entry.blockId !== 'string') delete entry.blockId;
+      if (typeof entry.focusRunId !== 'string') delete entry.focusRunId;
+    }
     return x;
   } catch {
     return structuredClone(initial);
