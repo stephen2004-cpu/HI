@@ -38,8 +38,63 @@ import { playSound, unlockAudio } from './audio';
 import SessionEditor from './components/SessionEditor';
 import History from './components/History';
 import TaskBoard from './components/TaskBoard';
+import Calendar from './components/Calendar';
+import Insights from './components/Insights';
+import PlannerSettings from './components/PlannerSettings';
+import { readTasks } from './tasks';
+import { loadPlanner, savePlanner, type Planner } from './planner';
 const presets = [15, 30, 60, 120, 300, 600, 900, 1500, 1800, 2700];
 export default function App() {
+  const screens = ['Lịch', 'Task', 'Focus', 'Tổng quan', 'Thống kê', 'Cài đặt'];
+  const [screen, setScreen] = useState(() =>
+    screens.includes(decodeURI(location.hash.slice(1)))
+      ? decodeURI(location.hash.slice(1))
+      : 'Lịch',
+  );
+  const [taskState, setTaskState] = useState(readTasks);
+  const [plannerState] = useState(loadPlanner);
+  const [planner, setPlanner] = useState(plannerState.data);
+  const [plannerError, setPlannerError] = useState(
+    plannerState.error
+      ? 'Không đọc được dữ liệu lịch. Dữ liệu gốc được giữ nguyên; lịch tạm khóa chỉnh sửa.'
+      : '',
+  );
+  const [selectedTask, setSelectedTask] = useState('');
+  const navigate = (next: string) => {
+    setTaskState(readTasks());
+    setScreen(next);
+    location.hash = encodeURI(next);
+  };
+  useEffect(() => {
+    const change = () => {
+      const next = decodeURI(location.hash.slice(1));
+      setScreen(screens.includes(next) ? next : 'Lịch');
+      setTaskState(readTasks());
+    };
+    window.addEventListener('hashchange', change);
+    return () => window.removeEventListener('hashchange', change);
+  }, []);
+  const updatePlanner = (next: Planner) => {
+    if (plannerState.error) return false;
+    if (!savePlanner(next)) {
+      setPlannerError(
+        'Không lưu được lịch. Kiểm tra dung lượng hoặc quyền lưu trữ rồi thử lại.',
+      );
+      return false;
+    }
+    setPlanner(next);
+    setPlannerError('');
+    return true;
+  };
+  const focusTask = (id: string) => {
+    if (dataRef.current.snapshot.run) {
+      setNotice('Đang có phiên Focus; hãy kết thúc phiên trước khi đổi Task.');
+      navigate('Focus');
+      return;
+    }
+    setSelectedTask(id);
+    navigate('Focus');
+  };
   const [data, setData] = useState<Saved>(load);
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -171,12 +226,15 @@ export default function App() {
             name: x.name.trim() || `Phiên ${i + 1}`,
           }));
     snap({
-      run: begin(
-        mode,
-        sessions,
-        mode === 'study' && d.settings.loop,
-        Date.now(),
-      ),
+      run: {
+        ...begin(
+          mode,
+          sessions,
+          mode === 'study' && d.settings.loop,
+          Date.now(),
+        ),
+        taskId: selectedTask || undefined,
+      },
       history: d.snapshot.history,
     });
     if (!(await unlockAudio()))
@@ -226,6 +284,7 @@ export default function App() {
         remaining: current(r).seconds * 1000,
         deadline: time + current(r).seconds * 1000,
         started: time,
+        measured: true,
         status: 'running',
       },
     });
@@ -240,7 +299,14 @@ export default function App() {
     if (r.index < r.sessions.length - 1 || r.loop) {
       const index = (r.index + 1) % r.sessions.length;
       const ms = r.sessions[index].seconds * 1000;
-      next = { ...r, index, remaining: ms, deadline: time + ms, started: time };
+      next = {
+        ...r,
+        index,
+        remaining: ms,
+        deadline: time + ms,
+        started: time,
+        measured: true,
+      };
     }
     snap({
       run: next,
@@ -312,307 +378,391 @@ export default function App() {
           </button>
         </div>
       </header>
+      <nav className="app-nav" aria-label="Điều hướng chính">
+        {screens.map((item) => (
+          <button
+            key={item}
+            aria-current={screen === item ? 'page' : undefined}
+            onClick={() => navigate(item)}
+          >
+            {item}
+          </button>
+        ))}
+      </nav>
+      {run && screen !== 'Focus' && (
+        <button className="running-banner" onClick={() => navigate('Focus')}>
+          Focus {run.status === 'paused' ? 'tạm dừng' : 'đang chạy'} · {hh}:{mm}
+          :{ss} · Quay lại →
+        </button>
+      )}
       <main>
-        <TaskBoard />
-        <section className="intro">
-          <div className="eyebrow">
-            <span /> ÍT XAO NHÃNG. NHIỀU GIÁ TRỊ.
-          </div>
-          <h1>
-            Dành thời gian cho
-            <br />
-            <em>điều quan trọng.</em>
-          </h1>
-          <p>
-            Một không gian yên tĩnh. Một mục tiêu rõ ràng.
-            <br className="mobile-break" /> Bắt đầu nhịp tập trung của riêng
-            bạn.
+        {plannerError && <p role="alert">{plannerError}</p>}
+        {taskState.error && screen !== 'Task' && (
+          <p role="alert">
+            Không đọc được dữ liệu Task. Dữ liệu gốc vẫn được giữ nguyên.
           </p>
-        </section>
-        <div className="mode-tabs" role="tablist" aria-label="Chế độ tập trung">
-          <button
-            role="tab"
-            aria-selected={mode === 'timer'}
-            className={mode === 'timer' ? 'selected' : ''}
-            disabled={!!run && run.mode !== 'timer'}
-            onClick={() => setMode('timer')}
-          >
-            <Clock3 size={17} />
-            Đồng hồ đếm ngược
-          </button>
-          <button
-            role="tab"
-            aria-selected={mode === 'study'}
-            className={mode === 'study' ? 'selected' : ''}
-            disabled={!!run && run.mode !== 'study'}
-            onClick={() => setMode('study')}
-          >
-            <BookOpen size={17} />
-            Chế độ học tập
-          </button>
-        </div>
-        <section
-          ref={panel}
-          className={`timer-card ${focus ? 'focus-view' : ''}`}
-          aria-label={mode === 'timer' ? 'Đồng hồ đếm ngược' : 'Chế độ học tập'}
-        >
-          <div className="card-topline">
-            <span className="card-label">
-              <span
-                className={`live-dot ${run?.status === 'running' ? 'running' : ''}`}
-              />
-              {run
-                ? run.status === 'paused'
-                  ? 'ĐANG TẠM DỪNG'
-                  : 'ĐANG TẬP TRUNG'
-                : mode === 'timer'
-                  ? 'KHOẢNG THỜI GIAN CỦA BẠN'
-                  : 'NHỊP HỌC CỦA BẠN'}
-            </span>
-            <button
-              className="icon-button"
-              aria-label={focus ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
-              onClick={fullscreen}
-            >
-              {focus ? <X size={17} /> : <Maximize2 size={17} />}
-            </button>
-          </div>
-          <div className="timer-center">
-            {run ? (
-              <div className="session-name-display">
-                {run.mode === 'study' &&
-                  (active?.kind === 'break' ? (
-                    <Coffee size={15} />
-                  ) : (
-                    <BookOpen size={15} />
-                  ))}
-                {active?.name}
-              </div>
-            ) : (
-              <div className="session-name-display">
-                {mode === 'study'
-                  ? 'Sẵn sàng cho một buổi học hiệu quả'
-                  : s.name || 'Thời gian tập trung'}
-              </div>
-            )}
-            <div
-              className="clock"
-              role="timer"
-              aria-label={`${hh} giờ ${mm} phút ${ss} giây`}
-            >
-              <span>{hh}</span>
-              <span className="clock-colon">:</span>
-              <span>{mm}</span>
-              <div className="clock-seconds">
-                <span>{ss}</span>
-                <small>GIÂY</small>
-              </div>
-            </div>
-            <div className="clock-units">
-              <span>GIỜ</span>
-              <span>PHÚT</span>
-            </div>
-            <div
-              className="progress-track"
-              role="progressbar"
-              aria-label="Thời gian còn lại"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(progress)}
-            >
-              <div style={{ width: `${progress}%` }} />
-            </div>
-            <div className="progress-caption">
-              <span>
-                {run
-                  ? run.status === 'paused'
-                    ? 'Hít thở một chút, rồi tiếp tục nhé.'
-                    : 'Chỉ một việc, ngay lúc này.'
-                  : 'Mỗi hành trình bắt đầu từ một khoảnh khắc.'}
-              </span>
-              {run?.mode === 'study' && (
-                <strong>
-                  Phiên {run.index + 1} / {run.sessions.length}
-                </strong>
-              )}
-            </div>
-            <div className="timer-controls">
-              {!run ? (
-                <button className="button primary" onClick={start}>
-                  <Play size={17} fill="currentColor" />{' '}
-                  {mode === 'timer' ? 'Bắt đầu tập trung' : 'Bắt đầu chuỗi học'}{' '}
-                  <ChevronRight size={16} />
-                </button>
-              ) : (
-                <>
-                  <button className="button primary" onClick={pause}>
-                    {run.status === 'running' ? (
-                      <Pause size={17} />
-                    ) : (
-                      <Play size={17} />
-                    )}{' '}
-                    {run.status === 'running' ? 'Tạm dừng' : 'Tiếp tục'}
-                  </button>
-                  {run.mode === 'timer' ? (
-                    <button
-                      className="button outline"
-                      aria-label="Khởi động lại"
-                      onClick={restart}
-                    >
-                      <RotateCcw size={17} />
-                      <span>Khởi động lại</span>
-                    </button>
-                  ) : (
-                    <button
-                      className="button outline"
-                      aria-label="Bỏ qua"
-                      onClick={skip}
-                    >
-                      <SkipForward size={17} />
-                      <span>Bỏ qua</span>
-                    </button>
-                  )}
-                  <button
-                    className="icon-button stop-button"
-                    aria-label="Kết thúc phiên"
-                    onClick={() => {
-                      if (document.fullscreenElement)
-                        void document.exitFullscreen();
-                      setFocus(false);
-                      setConfirm('stop');
-                    }}
-                  >
-                    <Square size={17} />
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-          {!run && mode === 'timer' && (
-            <div className="timer-settings">
-              <div className="settings-grid">
-                <label className="name-field">
-                  <span>TÊN PHIÊN</span>
-                  <input
-                    value={s.name}
-                    maxLength={80}
-                    placeholder="Bạn muốn tập trung vào điều gì?"
-                    onChange={(e) => settings({ name: e.target.value })}
-                  />
-                </label>
-                <div className="time-field">
-                  <span>THỜI GIAN</span>
-                  <div className="time-inputs">
-                    {(['hours', 'minutes', 'seconds'] as const).map(
-                      (key, i) => (
-                        <label key={key}>
-                          <input
-                            aria-label={['Giờ', 'Phút', 'Giây'][i]}
-                            type="number"
-                            min="0"
-                            max={i === 0 ? 99 : 59}
-                            value={s[key]}
-                            onChange={(e) =>
-                              settings({
-                                [key]: Math.max(
-                                  0,
-                                  Math.min(
-                                    i === 0 ? 99 : 59,
-                                    Math.floor(Number(e.target.value)),
-                                  ),
-                                ),
-                              })
-                            }
-                          />
-                          <span>{['giờ', 'phút', 'giây'][i]}</span>
-                        </label>
-                      ),
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="presets-label">
-                CHỌN NHANH <span>Một nhịp nhỏ cho ngày dài</span>
-              </div>
-              <div className="presets">
-                {presets.map((sec) => (
-                  <button
-                    key={sec}
-                    className={seconds === sec ? 'active' : ''}
-                    onClick={() =>
-                      settings({
-                        hours: 0,
-                        minutes: Math.floor(sec / 60),
-                        seconds: sec % 60,
-                      })
-                    }
-                  >
-                    {sec < 60 ? `${sec} giây` : `${sec / 60} phút`}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="card-bottom">
-            <div className="sound-control">
-              <button
-                className="icon-button"
-                aria-label={s.muted ? 'Bật âm thanh' : 'Tắt âm thanh'}
-                onClick={() => settings({ muted: !s.muted })}
-              >
-                {s.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-              </button>
-              <input
-                aria-label="Âm lượng"
-                type="range"
-                min="0"
-                max="100"
-                value={s.volume}
-                onChange={(e) => settings({ volume: Number(e.target.value) })}
-              />
-              <span>{s.muted ? 'Tắt tiếng' : `${s.volume}%`}</span>
-              <button
-                className="text-button sound-test"
-                onClick={async () => {
-                  if (await unlockAudio())
-                    playSound('bell', s.muted ? 0 : s.volume);
-                  else announce('Trình duyệt chưa cho phép phát âm thanh.');
-                }}
-              >
-                Nghe thử
-              </button>
-            </div>
-            <span className="sound-caption">
-              <Headphones size={13} /> Một chút yên tĩnh, nhiều hơn tập trung
-            </span>
-          </div>
-        </section>
-        {mode === 'study' && (
-          <SessionEditor
-            sessions={s.sessions}
-            disabled={!!run}
-            onChange={(sessions) => settings({ sessions })}
-            loop={s.loop}
-            onLoop={(loop) => settings({ loop })}
+        )}
+        {screen === 'Lịch' && (
+          <Calendar
+            tasks={taskState.tasks}
+            planner={planner}
+            update={updatePlanner}
+            focusTask={focusTask}
+            locked={plannerState.error || taskState.error}
           />
         )}
-        <div className="under-card">
-          <span>
-            <Check size={13} /> Tự động lưu trên thiết bị
-          </span>
-          <span>
-            <Expand size={13} /> Không gian tối giản cho tâm trí
-          </span>
-        </div>
-        <History
-          history={data.snapshot.history}
-          onClear={() => setConfirm('clear')}
-        />
-        <div className="quiet-quote">
-          <span>“</span>
-          <p>Không cần làm tất cả. Chỉ cần trọn vẹn với điều đang làm.</p>
-          <small>LỘC BOY ĐẢO</small>
-        </div>
+        {screen === 'Task' && <TaskBoard />}
+        {(screen === 'Tổng quan' || screen === 'Thống kê') && (
+          <Insights
+            tasks={taskState.tasks}
+            planner={planner}
+            snapshot={data.snapshot}
+            overview={screen === 'Tổng quan'}
+            go={navigate}
+          />
+        )}
+        {screen === 'Cài đặt' && (
+          <PlannerSettings
+            planner={planner}
+            update={updatePlanner}
+            locked={plannerState.error}
+          />
+        )}
+        {screen === 'Focus' && (
+          <>
+            <div className="focus-task-picker">
+              <label>
+                Task đang tập trung
+                <select
+                  disabled={!!run}
+                  value={run?.taskId || selectedTask}
+                  onChange={(e) => setSelectedTask(e.target.value)}
+                >
+                  <option value="">Không chọn Task — Focus độc lập</option>
+                  {run?.taskId &&
+                    !taskState.tasks.some((t) => t.id === run.taskId) && (
+                      <option value={run.taskId}>Task đã xóa</option>
+                    )}
+                  {taskState.tasks.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <section className="intro">
+              <div className="eyebrow">
+                <span /> ÍT XAO NHÃNG. NHIỀU GIÁ TRỊ.
+              </div>
+              <h1>
+                Dành thời gian cho
+                <br />
+                <em>điều quan trọng.</em>
+              </h1>
+              <p>
+                Một không gian yên tĩnh. Một mục tiêu rõ ràng.
+                <br className="mobile-break" /> Bắt đầu nhịp tập trung của riêng
+                bạn.
+              </p>
+            </section>
+            <div
+              className="mode-tabs"
+              role="tablist"
+              aria-label="Chế độ tập trung"
+            >
+              <button
+                role="tab"
+                aria-selected={mode === 'timer'}
+                className={mode === 'timer' ? 'selected' : ''}
+                disabled={!!run && run.mode !== 'timer'}
+                onClick={() => setMode('timer')}
+              >
+                <Clock3 size={17} />
+                Đồng hồ đếm ngược
+              </button>
+              <button
+                role="tab"
+                aria-selected={mode === 'study'}
+                className={mode === 'study' ? 'selected' : ''}
+                disabled={!!run && run.mode !== 'study'}
+                onClick={() => setMode('study')}
+              >
+                <BookOpen size={17} />
+                Chế độ học tập
+              </button>
+            </div>
+            <section
+              ref={panel}
+              className={`timer-card ${focus ? 'focus-view' : ''}`}
+              aria-label={
+                mode === 'timer' ? 'Đồng hồ đếm ngược' : 'Chế độ học tập'
+              }
+            >
+              <div className="card-topline">
+                <span className="card-label">
+                  <span
+                    className={`live-dot ${run?.status === 'running' ? 'running' : ''}`}
+                  />
+                  {run
+                    ? run.status === 'paused'
+                      ? 'ĐANG TẠM DỪNG'
+                      : 'ĐANG TẬP TRUNG'
+                    : mode === 'timer'
+                      ? 'KHOẢNG THỜI GIAN CỦA BẠN'
+                      : 'NHỊP HỌC CỦA BẠN'}
+                </span>
+                <button
+                  className="icon-button"
+                  aria-label={focus ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
+                  onClick={fullscreen}
+                >
+                  {focus ? <X size={17} /> : <Maximize2 size={17} />}
+                </button>
+              </div>
+              <div className="timer-center">
+                {run ? (
+                  <div className="session-name-display">
+                    {run.mode === 'study' &&
+                      (active?.kind === 'break' ? (
+                        <Coffee size={15} />
+                      ) : (
+                        <BookOpen size={15} />
+                      ))}
+                    {active?.name}
+                  </div>
+                ) : (
+                  <div className="session-name-display">
+                    {mode === 'study'
+                      ? 'Sẵn sàng cho một buổi học hiệu quả'
+                      : s.name || 'Thời gian tập trung'}
+                  </div>
+                )}
+                <div
+                  className="clock"
+                  role="timer"
+                  aria-label={`${hh} giờ ${mm} phút ${ss} giây`}
+                >
+                  <span>{hh}</span>
+                  <span className="clock-colon">:</span>
+                  <span>{mm}</span>
+                  <div className="clock-seconds">
+                    <span>{ss}</span>
+                    <small>GIÂY</small>
+                  </div>
+                </div>
+                <div className="clock-units">
+                  <span>GIỜ</span>
+                  <span>PHÚT</span>
+                </div>
+                <div
+                  className="progress-track"
+                  role="progressbar"
+                  aria-label="Thời gian còn lại"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(progress)}
+                >
+                  <div style={{ width: `${progress}%` }} />
+                </div>
+                <div className="progress-caption">
+                  <span>
+                    {run
+                      ? run.status === 'paused'
+                        ? 'Hít thở một chút, rồi tiếp tục nhé.'
+                        : 'Chỉ một việc, ngay lúc này.'
+                      : 'Mỗi hành trình bắt đầu từ một khoảnh khắc.'}
+                  </span>
+                  {run?.mode === 'study' && (
+                    <strong>
+                      Phiên {run.index + 1} / {run.sessions.length}
+                    </strong>
+                  )}
+                </div>
+                <div className="timer-controls">
+                  {!run ? (
+                    <button className="button primary" onClick={start}>
+                      <Play size={17} fill="currentColor" />{' '}
+                      {mode === 'timer'
+                        ? 'Bắt đầu tập trung'
+                        : 'Bắt đầu chuỗi học'}{' '}
+                      <ChevronRight size={16} />
+                    </button>
+                  ) : (
+                    <>
+                      <button className="button primary" onClick={pause}>
+                        {run.status === 'running' ? (
+                          <Pause size={17} />
+                        ) : (
+                          <Play size={17} />
+                        )}{' '}
+                        {run.status === 'running' ? 'Tạm dừng' : 'Tiếp tục'}
+                      </button>
+                      {run.mode === 'timer' ? (
+                        <button
+                          className="button outline"
+                          aria-label="Khởi động lại"
+                          onClick={restart}
+                        >
+                          <RotateCcw size={17} />
+                          <span>Khởi động lại</span>
+                        </button>
+                      ) : (
+                        <button
+                          className="button outline"
+                          aria-label="Bỏ qua"
+                          onClick={skip}
+                        >
+                          <SkipForward size={17} />
+                          <span>Bỏ qua</span>
+                        </button>
+                      )}
+                      <button
+                        className="icon-button stop-button"
+                        aria-label="Kết thúc phiên"
+                        onClick={() => {
+                          if (document.fullscreenElement)
+                            void document.exitFullscreen();
+                          setFocus(false);
+                          setConfirm('stop');
+                        }}
+                      >
+                        <Square size={17} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+              {!run && mode === 'timer' && (
+                <div className="timer-settings">
+                  <div className="settings-grid">
+                    <label className="name-field">
+                      <span>TÊN PHIÊN</span>
+                      <input
+                        value={s.name}
+                        maxLength={80}
+                        placeholder="Bạn muốn tập trung vào điều gì?"
+                        onChange={(e) => settings({ name: e.target.value })}
+                      />
+                    </label>
+                    <div className="time-field">
+                      <span>THỜI GIAN</span>
+                      <div className="time-inputs">
+                        {(['hours', 'minutes', 'seconds'] as const).map(
+                          (key, i) => (
+                            <label key={key}>
+                              <input
+                                aria-label={['Giờ', 'Phút', 'Giây'][i]}
+                                type="number"
+                                min="0"
+                                max={i === 0 ? 99 : 59}
+                                value={s[key]}
+                                onChange={(e) =>
+                                  settings({
+                                    [key]: Math.max(
+                                      0,
+                                      Math.min(
+                                        i === 0 ? 99 : 59,
+                                        Math.floor(Number(e.target.value)),
+                                      ),
+                                    ),
+                                  })
+                                }
+                              />
+                              <span>{['giờ', 'phút', 'giây'][i]}</span>
+                            </label>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="presets-label">
+                    CHỌN NHANH <span>Một nhịp nhỏ cho ngày dài</span>
+                  </div>
+                  <div className="presets">
+                    {presets.map((sec) => (
+                      <button
+                        key={sec}
+                        className={seconds === sec ? 'active' : ''}
+                        onClick={() =>
+                          settings({
+                            hours: 0,
+                            minutes: Math.floor(sec / 60),
+                            seconds: sec % 60,
+                          })
+                        }
+                      >
+                        {sec < 60 ? `${sec} giây` : `${sec / 60} phút`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="card-bottom">
+                <div className="sound-control">
+                  <button
+                    className="icon-button"
+                    aria-label={s.muted ? 'Bật âm thanh' : 'Tắt âm thanh'}
+                    onClick={() => settings({ muted: !s.muted })}
+                  >
+                    {s.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                  </button>
+                  <input
+                    aria-label="Âm lượng"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={s.volume}
+                    onChange={(e) =>
+                      settings({ volume: Number(e.target.value) })
+                    }
+                  />
+                  <span>{s.muted ? 'Tắt tiếng' : `${s.volume}%`}</span>
+                  <button
+                    className="text-button sound-test"
+                    onClick={async () => {
+                      if (await unlockAudio())
+                        playSound('bell', s.muted ? 0 : s.volume);
+                      else announce('Trình duyệt chưa cho phép phát âm thanh.');
+                    }}
+                  >
+                    Nghe thử
+                  </button>
+                </div>
+                <span className="sound-caption">
+                  <Headphones size={13} /> Một chút yên tĩnh, nhiều hơn tập
+                  trung
+                </span>
+              </div>
+            </section>
+            {mode === 'study' && (
+              <SessionEditor
+                sessions={s.sessions}
+                disabled={!!run}
+                onChange={(sessions) => settings({ sessions })}
+                loop={s.loop}
+                onLoop={(loop) => settings({ loop })}
+              />
+            )}
+            <div className="under-card">
+              <span>
+                <Check size={13} /> Tự động lưu trên thiết bị
+              </span>
+              <span>
+                <Expand size={13} /> Không gian tối giản cho tâm trí
+              </span>
+            </div>
+            <History
+              history={data.snapshot.history}
+              onClear={() => setConfirm('clear')}
+            />
+            <div className="quiet-quote">
+              <span>“</span>
+              <p>Không cần làm tất cả. Chỉ cần trọn vẹn với điều đang làm.</p>
+              <small>LỘC BOY ĐẢO</small>
+            </div>
+          </>
+        )}
       </main>
       <footer>
         <a className="footer-brand" href="#">

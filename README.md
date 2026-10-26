@@ -125,3 +125,44 @@ Vẫn nên dùng một tab chỉnh sửa để tránh ghi đè giữa nhiều ta
 Calendar, liên kết Task–Timer, Planned/Actual Time và logo mới chưa thuộc
 bản giai đoạn 1. Kiểm thử trình duyệt dùng Chromium desktop và mobile giả
 lập; kéo thả cảm ứng trên thiết bị thật cần kiểm tra thủ công.
+
+## Calendar-first workspace
+
+Sáu màn hình riêng: Lịch (mặc định), Task, Focus, Tổng quan, Thống kê,
+Cài đặt. Hash navigation giữ màn hình sau khi tải lại; timer vẫn chạy khi
+chuyển màn hình. Tuần mặc định bắt đầu thứ Hai, có đủ bảy ngày, trục 24 giờ
+cuộn được. Trên điện thoại cuộn ngang lịch tuần hoặc chọn Ngày; lịch tháng
+nhỏ có thể mở/thu gọn để dành chỗ cho lịch chính.
+
+Kéo Task chưa lên lịch vào lịch để tạo block (mặc định 60 phút). Kéo block
+để đổi ngày/giờ, kéo cạnh dưới để thay đổi thời lượng theo bước 15 phút.
+Bấm block để chỉnh bằng ngày/giờ thủ công, chọn Task khác, màu riêng, xóa
+có xác nhận hoặc mở Focus cho Task. Form cũng cho phép thêm nhiều block
+cho cùng Task. Block chồng lấn hiển thị theo cột, block qua nửa đêm được
+hiển thị ở các ngày liên quan. Màu block ưu tiên màu riêng, rồi màu Task,
+rồi màu nhóm Eisenhower. Không đổi nhóm ưu tiên khi đổi màu hoặc giờ.
+
+`lbd-focus-v2-planner` lưu block và tùy chọn tuần/thời lượng mặc định;
+không ghi vào key V1. Dữ liệu lỗi được giữ nguyên và khóa sửa lịch.
+Ngày giờ theo múi giờ trình duyệt, tuần thay đổi bằng lịch địa phương.
+Lịch là lưới 24 giờ địa phương: vào ngày chuyển DST, giờ lặp không có hàng
+riêng; dùng form để kiểm tra thời điểm. Chưa có lặp lịch hoặc đồng bộ lịch
+Google/Apple, chưa có đồng bộ nhiều tab/thiết bị.
+
+Focus có thể chạy độc lập hoặc liên kết một Task. Nhiều phiên có thể gắn
+cùng Task. Không đổi Task giữa phiên đang chạy. Actual mới đo từ thời lượng
+đã tiêu thụ, loại trừ tạm dừng và phiên nghỉ; dừng sớm, bỏ qua, khởi động lại
+vẫn ghi đúng phần đã tập trung. Dữ liệu timer cũ không bị đoán Actual.
+Planned cộng thời lượng tất cả block, kể cả block chồng lấn. Thống kê Actual
+chỉ tính phiên đã vào lịch sử, tối đa 1.000 bản ghi đang được giữ, không gồm
+phiên đang chạy hoặc các vòng vắng mặt bị bỏ qua theo giới hạn engine cũ.
+Xóa Task giữ lại block và lịch sử liên quan, hiển thị tên Task đã lưu/đã xóa.
+Xóa lịch sử Focus cũng xóa số đo Actual tương ứng; nên xuất sao lưu JSON ở
+Cài đặt trước khi xóa. Chưa có chức năng nhập lại JSON.
+
+Validation: `npm run build`, `npm test`,
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e`.
+Các test bao gồm Task CRUD, điều hướng riêng, lên lịch thủ công, kéo Task,
+chuyển/resize block, màu, nhiều block chồng lấn/qua ngày, Planned/Actual,
+khôi phục sau reload và hồi quy hai chế độ timer trên desktop/mobile giả lập.
+Safari, cảm ứng trên thiết bị thật, âm thanh nền vẫn cần kiểm tra thủ công.

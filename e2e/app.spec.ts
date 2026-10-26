@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#Focus');
 });
 test('timer completes, persists history, exports CSV and clears history', async ({
   page,

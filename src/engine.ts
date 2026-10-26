@@ -8,6 +8,8 @@ export type Session = {
   sound: Sound;
 };
 export type RecordEntry = {
+  taskId?: string;
+  actualSeconds?: number;
   id: string;
   name: string;
   type: string;
@@ -17,6 +19,8 @@ export type RecordEntry = {
   status: 'completed' | 'stopped';
 };
 export type Run = {
+  taskId?: string;
+  measured?: boolean;
   mode: Mode;
   sessions: Session[];
   index: number;
@@ -54,6 +58,12 @@ export function record(
   const s = current(r);
   return {
     id: uid(),
+    taskId: r.taskId,
+    actualSeconds: r.measured
+      ? s.kind === 'break'
+        ? 0
+        : Math.max(0, Math.min(s.seconds, s.seconds - remaining(r, end) / 1000))
+      : undefined,
     name: s.name,
     type:
       r.mode === 'timer'
@@ -75,6 +85,7 @@ export function begin(
 ): Run {
   return {
     mode,
+    measured: true,
     sessions: structuredClone(sessions),
     index: 0,
     remaining: sessions[0].seconds * 1000,

@@ -90,6 +90,16 @@ export function load(): Saved {
           ['completed', 'stopped'].includes(h.status),
       )
       .slice(0, 1000);
+    // Optional V2 metadata must not invalidate otherwise recoverable legacy data.
+    if (r) {
+      if (typeof r.taskId !== 'string') delete r.taskId;
+      if (r.measured !== true) delete r.measured;
+    }
+    x.snapshot.history.forEach((h) => {
+      if (typeof h.taskId !== 'string') delete h.taskId;
+      if (h.actualSeconds !== undefined && !num(h.actualSeconds, h.seconds))
+        delete h.actualSeconds;
+    });
     return x;
   } catch {
     return structuredClone(initial);

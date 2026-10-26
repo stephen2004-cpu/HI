@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 test('task CRUD, colors, priority, completion and reload', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#Task');
   await page.getByLabel('Tên công việc').fill('Task thử');
   await page.getByLabel('Ghi chú', { exact: true }).fill('Ghi chú thử');
   await page.getByLabel('Màu riêng').fill('#aa3377');
@@ -33,7 +33,7 @@ test('task CRUD, colors, priority, completion and reload', async ({ page }) => {
   await expect(card).toHaveCount(0);
 });
 test('legacy timer is preserved byte for byte', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#Focus');
   const legacy = await page.evaluate(() =>
     localStorage.getItem('lbd-focus-v2-timer'),
   );

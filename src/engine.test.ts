@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { advance, begin, defaults, remaining, type Session } from './engine';
+import {
+  advance,
+  begin,
+  defaults,
+  remaining,
+  record,
+  type Session,
+} from './engine';
 const sessions: Session[] = [
   { ...defaults[0], seconds: 2 },
   { ...defaults[1], seconds: 1 },
@@ -76,4 +83,33 @@ describe('Absolute-deadline timer', () => {
     expect(advance(stored, 7000).snapshot.run).toBeNull();
     expect(advance(stored, 7000).snapshot.history).toHaveLength(3);
   });
+});
+
+it('measures focused time excluding pause, and attributes records to a task', () => {
+  let run = begin(
+    'timer',
+    [{ id: 't', name: 'Task', kind: 'study', seconds: 60, sound: 'silent' }],
+    false,
+    1000,
+  );
+  run.taskId = 'task-1';
+  run = { ...run, status: 'paused', remaining: 40000 };
+  expect(record(run, 999999, 'stopped').actualSeconds).toBe(20);
+  run = { ...run, status: 'running', deadline: 200000 + run.remaining };
+  const result = advance({ run, history: [] }, 240000);
+  expect(result.snapshot.history[0]).toMatchObject({
+    taskId: 'task-1',
+    actualSeconds: 60,
+  });
+});
+it('does not count breaks or guess actual time for legacy runs', () => {
+  const run = begin(
+    'study',
+    [{ id: 'b', name: 'Break', kind: 'break', seconds: 60, sound: 'silent' }],
+    false,
+    0,
+  );
+  expect(record(run, 30000, 'stopped').actualSeconds).toBe(0);
+  delete run.measured;
+  expect(record(run, 30000, 'stopped').actualSeconds).toBeUndefined();
 });
