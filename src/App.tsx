@@ -50,16 +50,27 @@ import {
   type Task,
 } from './tasks';
 import FocusDetails from './components/FocusDetails';
+import HabitTracker from './components/HabitTracker';
+import { validDate, type Habit } from './habits';
 import { loadReviews, saveReviews, type Review } from './performance';
 import { loadPlanner, savePlanner, type Planner } from './planner';
 const presets = [15, 30, 60, 120, 300, 600, 900, 1500, 1800, 2700];
 export default function App() {
-  const screens = ['Lịch', 'Task', 'Focus', 'Tổng quan', 'Thống kê', 'Cài đặt'];
+  const screens = [
+    'Lịch',
+    'Task',
+    'Thói quen',
+    'Focus',
+    'Tổng quan',
+    'Thống kê',
+    'Cài đặt',
+  ];
   const [screen, setScreen] = useState(() =>
     screens.includes(decodeURI(location.hash.slice(1)))
       ? decodeURI(location.hash.slice(1))
       : 'Lịch',
   );
+  const [calendarDate, setCalendarDate] = useState('');
   const [taskState, setTaskState] = useState(readTasks);
   const [plannerState] = useState(loadPlanner);
   const [planner, setPlanner] = useState(plannerState.data);
@@ -145,6 +156,81 @@ export default function App() {
     }
     selectTask(id, blockId);
     navigate('Focus');
+  };
+  const connectHabit = (
+    habit: Habit,
+    date: string,
+    destination: 'calendar' | 'focus',
+  ) => {
+    if (!validDate(date)) {
+      setNotice('Chọn ngày thực hiện hợp lệ.');
+      return;
+    }
+    if (destination === 'focus' && dataRef.current.snapshot.run) {
+      setNotice(
+        'Đang có phiên Focus. Kết thúc phiên trước khi mở lần thực hiện khác.',
+      );
+      navigate('Focus');
+      return;
+    }
+    const loaded = readTasks();
+    if (loaded.error || plannerState.error) {
+      setNotice(
+        'Không đọc được dữ liệu Task hoặc lịch. Dữ liệu gốc được giữ nguyên.',
+      );
+      return;
+    }
+    const id = `habit:${habit.id}:${date}`;
+    if (!loaded.tasks.some((t) => t.id === id)) {
+      const t: Task = {
+        id,
+        title: habit.name,
+        notes: `Lần thực hiện thói quen ngày ${date}. Đánh dấu thói quen tại trang Thói quen sau khi làm xong.`,
+        group: 'schedule',
+        color: '',
+        completed: false,
+        habitId: habit.id,
+        habitDate: date,
+        timing: {
+          mode: 'timer',
+          focusMinutes: habit.minutes,
+          focusCount: 1,
+          breakMinutes: 0,
+        },
+      };
+      if (!writeTasks([...loaded.tasks, t])) {
+        setNotice('Không lưu được lần thực hiện. Hãy thử lại.');
+        return;
+      }
+    }
+    if (destination === 'calendar') {
+      const blockId = `habit-block:${habit.id}:${date}`,
+        start = new Date(`${date}T09:00:00`).getTime();
+      if (
+        !planner.blocks.some((b) => b.id === blockId) &&
+        !updatePlanner({
+          ...planner,
+          blocks: [
+            ...planner.blocks,
+            {
+              id: blockId,
+              taskId: id,
+              title: habit.name,
+              start,
+              end: start + habit.minutes * 60000,
+              color: '',
+            },
+          ],
+        })
+      ) {
+        setNotice(
+          'Đã giữ Task cho lần thực hiện, nhưng chưa lưu được lịch. Có thể thử lại mà không tạo trùng.',
+        );
+        return;
+      }
+      setCalendarDate(date);
+      navigate('Lịch');
+    } else focusTask(id);
   };
   const [data, setData] = useState<Saved>(load);
   const dataRef = useRef(data);
@@ -498,12 +584,14 @@ export default function App() {
           <Calendar
             tasks={taskState.tasks}
             planner={planner}
+            initialDate={calendarDate}
             update={updatePlanner}
             focusTask={focusTask}
             locked={plannerState.error || taskState.error}
           />
         )}
         {screen === 'Task' && <TaskBoard />}
+        {screen === 'Thói quen' && <HabitTracker connect={connectHabit} />}
         {(screen === 'Tổng quan' || screen === 'Thống kê') && (
           <Insights
             tasks={taskState.tasks}
@@ -685,6 +773,14 @@ export default function App() {
                       {focus ? <X size={17} /> : <Maximize2 size={17} />}
                     </button>
                   </div>
+                  {(run?.taskId || selectedTask) && (
+                    <div className="focus-landscape" aria-hidden="true">
+                      <span className="landscape-sun" />
+                      <span className="mountain mountain-far" />
+                      <span className="mountain mountain-middle" />
+                      <span className="mountain mountain-near" />
+                    </div>
+                  )}
                   <div className="timer-center">
                     {run ? (
                       <div className="session-name-display">

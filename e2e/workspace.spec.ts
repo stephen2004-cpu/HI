@@ -43,19 +43,50 @@ test('task setup, calendar to workspace, live edits and outcome remain after rel
   const before = await page.evaluate(
     () => JSON.parse(localStorage.getItem('lbd-focus-v2-timer')!).snapshot.run,
   );
-  await page.getByLabel('Notes — Thông tin làm việc').fill('Nguồn tham khảo');
+  await page
+    .getByRole('textbox', { name: 'Notes — Thông tin làm việc', exact: true })
+    .fill('Nguồn tham khảo');
   await page.getByLabel('Hoàn thành bước 1').check();
   await page.getByLabel('Actual Output — Kết quả thực tế').fill('Đã có dàn ý');
   const after = await page.evaluate(
     () => JSON.parse(localStorage.getItem('lbd-focus-v2-timer')!).snapshot.run,
   );
-  expect(after.focusRunId).toBe(before.focusRunId);
-  expect(after.started).toBe(before.started);
-  expect(after.blockId).toBeTruthy();
+  // Editing may span natural Study transitions on a slower mobile runner.
+  if (after) {
+    expect(after.focusRunId).toBe(before.focusRunId);
+    expect(after.started).toBe(
+      before.started +
+        before.sessions
+          .slice(before.index, after.index)
+          .reduce(
+            (n: number, session: { seconds: number }) =>
+              n + session.seconds * 1000,
+            0,
+          ),
+    );
+    expect(after.blockId).toBe(before.blockId);
+  } else {
+    const history = await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem('lbd-focus-v2-timer')!).snapshot
+          .history,
+    );
+    expect(
+      history.filter(
+        (h: { focusRunId: string }) => h.focusRunId === before.focusRunId,
+      ),
+    ).toHaveLength(3);
+    expect(
+      history.every((h: { blockId: string }) => h.blockId === before.blockId),
+    ).toBe(true);
+  }
   await page.reload();
-  await expect(page.getByLabel('Notes — Thông tin làm việc')).toHaveValue(
-    'Nguồn tham khảo',
-  );
+  await expect(
+    page.getByRole('textbox', {
+      name: 'Notes — Thông tin làm việc',
+      exact: true,
+    }),
+  ).toHaveValue('Nguồn tham khảo');
   await expect(page.getByLabel('Hoàn thành bước 1')).toBeChecked();
   await expect(
     page.getByRole('heading', { name: 'Ghi nhận kết quả phiên' }),

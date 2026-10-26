@@ -26,6 +26,8 @@ export const groups = [
 ] as const;
 export type Group = (typeof groups)[number]['id'];
 export type Task = {
+  habitId?: string;
+  habitDate?: string;
   checklist?: ChecklistStep[];
   expectedOutput?: string;
   actualOutput?: string;

@@ -12,6 +12,7 @@ import {
 } from '../planner';
 type Props = {
   tasks: Task[];
+  initialDate?: string;
   planner: Planner;
   update: (p: Planner) => boolean;
   focusTask: (id: string, blockId?: string) => void;
@@ -21,6 +22,7 @@ const shortDate = (d: Date) =>
   `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
 export default function Calendar({
   tasks,
+  initialDate,
   planner,
   update,
   focusTask,
@@ -28,7 +30,9 @@ export default function Calendar({
 }: Props) {
   const [miniOpen, setMiniOpen] = useState(() => window.innerWidth > 800);
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
-  const [date, setDate] = useState(dayStart(new Date()));
+  const [date, setDate] = useState(
+    dayStart(initialDate ? new Date(`${initialDate}T12:00:00`) : new Date()),
+  );
   const [draft, setDraft] = useState<TimeBlock | null>(null);
   const [error, setError] = useState('');
   const [resizing, setResizing] = useState(false);
@@ -166,6 +170,17 @@ export default function Calendar({
           <summary>Lịch tháng nhỏ</summary>
           {mini}
         </details>
+        <div
+          className="calendar-priorities"
+          aria-label="Nhóm ưu tiên Eisenhower"
+        >
+          {groups.map((g) => (
+            <span key={g.id}>
+              <i style={{ background: g.color }} />
+              {g.name}
+            </span>
+          ))}
+        </div>
         <h3>Task chưa lên lịch</h3>
         <p className="muted">Kéo vào lịch hoặc bấm để nhập giờ.</p>
         {tasks

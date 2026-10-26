@@ -76,6 +76,7 @@ export default function PlannerSettings({
                 'lbd-focus-v2-tasks',
                 'lbd-focus-v2-planner',
                 'lbd-focus-v2-reviews',
+                'lbd-focus-v2-habits',
               ].map((k) => [k, localStorage.getItem(k)]),
             );
             const url = URL.createObjectURL(

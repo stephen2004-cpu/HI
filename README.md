@@ -128,7 +128,7 @@ lập; kéo thả cảm ứng trên thiết bị thật cần kiểm tra thủ c
 
 ## Calendar-first workspace
 
-Sáu màn hình riêng: Lịch (mặc định), Task, Focus, Tổng quan, Thống kê,
+Bảy màn hình riêng: Lịch (mặc định), Task, Thói quen, Focus, Tổng quan, Thống kê,
 Cài đặt. Hash navigation giữ màn hình sau khi tải lại; timer vẫn chạy khi
 chuyển màn hình. Tuần mặc định bắt đầu thứ Hai, có đủ bảy ngày, trục 24 giờ
 cuộn được. Trên điện thoại cuộn ngang lịch tuần hoặc chọn Ngày; lịch tháng
@@ -213,3 +213,45 @@ Logo gốc hiển thị trong chat nhưng không được cung cấp thành tệ
 thiết kế lại. Cần cung cấp tệp PNG/SVG gốc để thay Header/favicon/mobile icon.
 Safari/iPhone thật và ngày DST cần kiểm tra thủ công. Chưa có đồng bộ nhiều
 tab, nhập lại JSON, lịch lặp tự động hoặc backend. Không dùng Supabase.
+
+## Focus visual refresh & Habit Tracker
+
+Focus giữ timer bên trái, checklist/Notes/Expected Output/Actual Output bên
+phải. Các thẻ có khoảng cách rõ, tương phản chữ cao hơn, tiến độ checklist,
+icon thống nhất và hai ô kết quả cạnh nhau trên desktop. Nền núi trong timer
+là trang trí CSS, không phải logo hoặc dữ liệu người dùng. Không thêm thao tác
+đổi theme, tài khoản hoặc nút giả chỉ để giống ảnh concept. Các điều khiển
+Countdown/Study, âm thanh, lịch sử, kết quả và gợi ý vẫn dùng logic hiện tại.
+
+Trang **Thói quen** có mục riêng trên Header. Tạo tên, nhóm, ngày lặp trong
+tuần, mục tiêu số lần/tuần và thời lượng khi kết nối Focus. Bảng tuần/tháng
+hiển thị Chưa nhập (—), Đã làm (✓), Tạm nghỉ (trăng); bấm ô theo vòng ba trạng
+thái. Không coi chưa nhập là thất bại, không cho đánh dấu ngày tương lai hoặc
+ngày ngoài lịch lặp. Có thể sửa thói quen, lưu trữ/khôi phục mà không xóa dấu.
+Không có thói quen mẫu tự được tạo cho người dùng.
+
+Habit lưu riêng tại `lbd-focus-v2-habits`, có phiên bản và kiểm tra cấu trúc;
+dữ liệu lỗi khóa ghi và giữ nguyên bản gốc. Xuất JSON trong Cài đặt đã bao gồm
+Habit. Không chuyển đổi hoặc ghi đè dữ liệu V1/V2 cũ để thêm Habit. Mục tiêu
+tuần là số lần đã làm / mục tiêu; tiến độ tháng là số ngày đã làm / số ngày
+trong tháng thuộc lịch lặp. Chuỗi đếm các lần theo lịch liên tiếp; tạm nghỉ
+không phá chuỗi, ngày theo lịch đã qua chưa nhập làm ngắt chuỗi. Hôm nay chưa
+nhập chưa làm ngắt chuỗi. Khi sửa lịch lặp, tiến độ/chuỗi được tính lại theo
+lịch mới; dấu cũ vẫn giữ. Chưa có lịch sử phiên bản lịch lặp.
+
+Habit khác Task: Habit theo dõi việc lặp lại, Task có kết quả cần hoàn thành.
+Chỉ khi bấm Lên lịch hoặc Focus, ứng dụng tạo Task cho một lần thực hiện theo
+ngày (khóa định danh theo Habit + ngày để không tạo trùng). Lên lịch tạo một
+block lúc 09:00, có thể kéo/sửa giờ bằng Calendar. Thời lượng dùng thiết lập
+Habit. Focus không tự chạy và không tự đánh dấu Habit, kể cả khi hoàn thành
+Task hoặc timer. Chọn cùng ngày/lần thực hiện sẽ tái sử dụng Task và block,
+không reset timer đang chạy. Nếu lưu lịch thất bại sau khi tạo Task, Task được
+giữ và thao tác có thể thử lại mà không tạo trùng. Tên Task lần thực hiện đã
+tạo không tự đổi khi sửa tên Habit.
+
+Tài liệu `docs/design-references/` chưa xuất hiện trên remote main hoặc nhánh
+feature tại lúc kiểm tra; GitHub và raw README đều trả 404. Chưa đọc được
+README/ảnh gốc trong thư mục này, nên đối chiếu ảnh đã gửi trong chat. Logo
+Header/favicon giữ nguyên cho đến khi truy cập được file logo chính thức;
+không vẽ lại từ ảnh màn hình. Preview cần kiểm tra deployment của nhánh feature,
+không chọn Promote to Production.

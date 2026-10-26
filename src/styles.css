@@ -2232,3 +2232,660 @@ main:has(.linked-focus) {
   max-width: 100%;
   white-space: normal;
 }
+
+/* Focus concept: four readable content cards, independent timer at the left. */
+.linked-focus {
+  gap: 24px;
+  align-items: start;
+  padding-top: 6px;
+}
+.linked-focus .focus-details {
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  padding: 0 0 0 24px;
+}
+.workspace-heading {
+  margin: 0 0 24px;
+}
+.workspace-heading h2 {
+  font-size: clamp(23px, 2.1vw, 31px);
+  letter-spacing: -0.6px;
+  margin: 0 0 8px;
+  line-height: 1.35;
+}
+.workspace-heading p {
+  color: #aaa69e;
+  font-size: 13px;
+  margin: 0;
+}
+.workspace-card,
+.focus-details .checklist {
+  background: linear-gradient(135deg, #17191a 0%, #111315 100%);
+  border: 1px solid #303234;
+  border-radius: 15px;
+  padding: 20px;
+  box-shadow: 0 3px 16px #0002;
+}
+.workspace-card h3,
+.checklist-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.5;
+}
+.workspace-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  color: #e4ba69;
+  background: linear-gradient(145deg, #5d4b2680, #302a1d);
+  border: 1px solid #a5813f66;
+}
+.workspace-outputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 16px;
+}
+.workspace-outputs .workspace-card {
+  min-width: 0;
+  padding: 16px;
+}
+.workspace-outputs h3 {
+  font-size: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.workspace-outputs h3 small {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.focus-details .workspace-card textarea {
+  min-height: 130px;
+  border: 1px solid #303236;
+  background: #0c0e1066;
+  padding: 14px;
+  font-size: 14px;
+  line-height: 1.8;
+  margin-top: 14px;
+  resize: vertical;
+  border-radius: 10px;
+}
+.focus-details .notes-card textarea {
+  min-height: 170px;
+}
+.focus-details .output-text {
+  font-size: 14px;
+  line-height: 1.8;
+  margin: 14px 0 0;
+  padding: 12px;
+  border: 1px solid #303236;
+  border-radius: 10px;
+  background: #0c0e1066;
+  min-height: 130px;
+}
+.focus-details .actual-card {
+  background: linear-gradient(140deg, #1c3026aa, #111a16);
+  border-color: #354d3d;
+}
+.actual-card .workspace-icon {
+  color: #8fc8a0;
+  border-color: #446950;
+  background: #274332;
+}
+.focus-details .workspace-reflection {
+  margin-top: 22px;
+  color: #b9b5ad;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.workspace-reflection h3 {
+  margin: 18px 0 12px;
+  color: var(--cream);
+}
+.focus-details .checklist {
+  position: relative;
+  margin: 0 0 16px;
+  min-inline-size: 0;
+}
+.focus-details .checklist legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 18px;
+}
+.checklist-progress {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  clear: both;
+  font-size: 11px;
+  color: #bbb6ad;
+  margin-bottom: 14px;
+}
+.checklist-progress progress {
+  appearance: none;
+  width: 120px;
+  max-width: 40%;
+  height: 7px;
+  border: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #26292b;
+}
+.checklist-progress progress::-webkit-progress-bar {
+  background: #26292b;
+}
+.checklist-progress progress::-webkit-progress-value {
+  background: linear-gradient(90deg, #edc477, #cfa45c);
+  border-radius: 8px;
+}
+.checklist-progress progress::-moz-progress-bar {
+  background: #dfb766;
+}
+.focus-details .checklist-row {
+  gap: 8px;
+  margin: 9px 0;
+}
+.focus-details .checklist-row input[type='checkbox'] {
+  appearance: auto;
+  accent-color: var(--gold);
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.focus-details .checklist-row input:not([type='checkbox']) {
+  border-radius: 9px;
+  border-color: #292c2f;
+  background: #0c0e1077;
+  padding: 12px 10px;
+  font-size: 14px;
+}
+.focus-details .checklist-row button {
+  width: 32px;
+  height: 37px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: linear-gradient(#24292b, #1a1e20);
+  color: #bdbbb4;
+  border-color: #34383a;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+.focus-details .checklist > .button {
+  width: 100%;
+  margin: 10px 0 0;
+  justify-content: flex-start;
+  background: #202527;
+  border-color: #343a3d;
+  color: var(--cream);
+}
+.linked-focus .focus-task-picker select {
+  padding: 15px;
+  background: linear-gradient(140deg, #141617, #0d0e0f);
+  border-color: #343436;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 500;
+}
+.linked-focus .mode-tabs {
+  width: 100%;
+  margin: 18px 0;
+  background: #151617;
+  border-color: #303234;
+  padding: 5px;
+}
+.linked-focus .mode-tabs button {
+  flex: 1;
+  padding: 12px 8px;
+  font-size: 12px;
+}
+.linked-focus .mode-tabs .selected {
+  background: #312b1f77;
+  box-shadow: inset 0 0 0 1px #96764780;
+  color: #eacb8b;
+}
+.linked-focus .timer-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid #3c3b35;
+  border-radius: 20px;
+  padding: 24px 20px 0;
+  background: linear-gradient(145deg, #1b1e1e, #0e1011 65%);
+}
+.linked-focus .card-topline,
+.linked-focus .timer-center,
+.linked-focus .timer-settings,
+.linked-focus .card-bottom {
+  position: relative;
+  z-index: 1;
+}
+.linked-focus .timer-center {
+  padding-top: 78px;
+}
+.linked-focus .clock {
+  font-size: clamp(64px, 6.7vw, 106px);
+  font-weight: 500;
+  letter-spacing: -5px;
+}
+.linked-focus .clock-seconds > span {
+  font-size: 29px;
+}
+.linked-focus .session-name-display {
+  font-size: 14px;
+  color: #d9d5ca;
+}
+.linked-focus .timer-settings {
+  background: transparent;
+}
+.linked-focus .timer-controls > .primary {
+  background: linear-gradient(120deg, #d9ad5c, #f1c978 60%, #dbac57);
+  color: #19150c;
+  border: 1px solid #f6d89088;
+  font-size: 14px;
+  min-height: 52px;
+  box-shadow:
+    0 0 25px #c99b3714,
+    inset 0 1px 0 #fff4;
+}
+.linked-focus .progress-track {
+  height: 6px;
+  background: #303335;
+}
+.linked-focus .progress-track > div {
+  background: linear-gradient(90deg, #f3ce82, #d9ad5c);
+}
+.linked-focus .progress-caption {
+  line-height: 1.7;
+  color: #aaa69b;
+}
+.focus-landscape {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  left: 0;
+  right: 0;
+  top: 38px;
+  height: 190px;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 72% 47%, #bc8e3345, transparent 51%);
+  mask-image: linear-gradient(#000 65%, transparent);
+}
+.landscape-sun {
+  position: absolute;
+  height: 62px;
+  width: 62px;
+  border-radius: 50%;
+  top: 35px;
+  left: 70%;
+  background: linear-gradient(130deg, #f6d48b, #d6a84e);
+  box-shadow: 0 0 45px #c99b3555;
+}
+.mountain {
+  position: absolute;
+  left: -5%;
+  width: 110%;
+  height: 140px;
+  bottom: 0;
+  clip-path: polygon(
+    0 47%,
+    8% 38%,
+    17% 47%,
+    27% 23%,
+    33% 30%,
+    44% 7%,
+    50% 24%,
+    57% 12%,
+    67% 42%,
+    73% 30%,
+    83% 59%,
+    91% 42%,
+    100% 59%,
+    100% 100%,
+    0 100%
+  );
+}
+.mountain-far {
+  background: #34322a;
+  bottom: 20px;
+}
+.mountain-middle {
+  background: #202829;
+  transform: scaleX(-1);
+  bottom: -5px;
+}
+.mountain-near {
+  background: #101819;
+  bottom: -30px;
+}
+.calendar-sidebar {
+  background: linear-gradient(180deg, #131516, #0c0d0e);
+  padding: 18px;
+  border: 1px solid #25282a;
+  border-radius: 14px;
+}
+.calendar-priorities {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 16px 0;
+  margin-bottom: 24px;
+  font-size: 12px;
+}
+.calendar-priorities span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.calendar-priorities i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.calendar-toolbar {
+  padding: 8px 0;
+}
+.day-heading {
+  background: #181b1c;
+}
+.day-column {
+  background: #0e1011;
+}
+.hour-slot {
+  border-bottom-color: #252829;
+}
+.time-block {
+  border-radius: 7px;
+  border: 1px solid #ffffff22;
+  box-shadow: 0 2px 5px #0002;
+}
+.calendar-main .priority-tag {
+  font-weight: 500;
+}
+.habit-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.habit-heading h1 {
+  font-size: 30px;
+  margin: 12px 0;
+}
+.habit-heading .eyebrow {
+  justify-content: flex-start;
+}
+.habit-badge {
+  background: #30291b;
+  color: var(--gold);
+  border: 1px solid #5b4a2b;
+  border-radius: 20px;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+.habit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: end;
+  margin: 24px 0;
+}
+.habit-form label,
+.habit-toolbar label,
+.habit-connections > label {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.habit-form input:not([type='checkbox']),
+.habit-form select,
+.habit-toolbar select,
+.habit-connections input {
+  padding: 10px;
+}
+.habit-repeat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+.habit-repeat label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.habit-repeat input {
+  accent-color: var(--gold);
+}
+.habit-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 25px 0;
+}
+.habit-toolbar > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.habit-toolbar label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+}
+.habit-table-scroll {
+  overflow: auto;
+  border: 1px solid #2d3031;
+  border-radius: 14px;
+  background: #111415;
+}
+.habit-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 7px;
+}
+.habit-table th {
+  min-width: 56px;
+  font-weight: 500;
+  font-size: 12px;
+}
+.habit-table th:first-child {
+  min-width: 150px;
+  text-align: left;
+  padding: 10px;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #111415;
+}
+.habit-table small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 5px;
+  font-weight: 400;
+}
+.habit-table td:last-child {
+  min-width: 130px;
+  padding: 10px;
+  font-size: 12px;
+}
+.habit-cell {
+  width: 100%;
+  min-width: 44px;
+  height: 46px;
+  border-radius: 10px;
+  border: 1px solid #353a3c;
+  background: #24292b;
+  color: #a3a8a5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.habit-cell.done {
+  background: linear-gradient(130deg, #8e9f61, #5a704b);
+  color: #fff4cf;
+  border-color: #a5b27077;
+}
+.habit-cell.rest {
+  background: #313630;
+  color: #b8bca6;
+}
+.habit-cell:disabled {
+  opacity: 0.4;
+}
+.habit-edit {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  padding: 5px;
+}
+.habit-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 25px;
+  font-size: 12px;
+  color: #c0c1b8;
+}
+.habit-legend span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.habit-empty {
+  padding: 25px;
+  text-align: center;
+  color: var(--muted);
+}
+.habit-connections {
+  margin-top: 30px;
+}
+.habit-connections > label {
+  max-width: 220px;
+}
+.habit-connect-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 16px 0;
+  margin-top: 16px;
+}
+.habit-connect-row > strong {
+  flex: 1;
+  min-width: 140px;
+}
+.app-nav button {
+  font-size: 13px;
+}
+@media (min-width: 801px) {
+  main:has(.habit-tracker) {
+    max-width: 1450px;
+  }
+}
+@media (max-width: 1000px) {
+  .workspace-outputs {
+    grid-template-columns: 1fr;
+  }
+  .focus-details .checklist-row {
+    gap: 5px;
+  }
+  .focus-details .checklist-row button {
+    width: 27px;
+  }
+}
+@media (max-width: 800px) {
+  .linked-focus .focus-details {
+    border: 0;
+    padding: 0;
+  }
+  .workspace-card,
+  .focus-details .checklist {
+    padding: 16px;
+  }
+  .workspace-heading h2 {
+    font-size: 24px;
+  }
+  .focus-details .checklist-row input:not([type='checkbox']) {
+    font-size: 13px;
+    padding: 11px 6px;
+  }
+  .linked-focus .timer-center {
+    padding-top: 65px;
+  }
+  .linked-focus .clock {
+    font-size: clamp(58px, 15vw, 88px);
+  }
+  .calendar-sidebar {
+    padding: 14px;
+  }
+  .calendar-priorities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    width: 100%;
+    margin: 0;
+    font-size: 11px;
+  }
+  .habit-heading {
+    align-items: start;
+  }
+  .habit-heading h1 {
+    font-size: 25px;
+  }
+  .habit-heading .eyebrow {
+    font-size: 9px;
+  }
+  .habit-form label {
+    width: 100%;
+  }
+  .habit-form .habit-repeat label {
+    width: auto;
+  }
+  .habit-form input:not([type='checkbox']),
+  .habit-form select {
+    width: 100%;
+  }
+  .habit-toolbar {
+    font-size: 12px;
+  }
+  .habit-toolbar > strong {
+    width: 100%;
+    order: -1;
+  }
+  .habit-repeat {
+    width: 100%;
+  }
+  .habit-connect-row .button {
+    padding: 10px 12px;
+  }
+  .habit-badge {
+    display: none;
+  }
+  .app-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .workspace-heading p {
+    overflow-wrap: anywhere;
+  }
+}

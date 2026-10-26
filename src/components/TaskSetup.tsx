@@ -1,3 +1,4 @@
+import { ListTodo, ArrowUp, ArrowDown, Trash2, Plus } from 'lucide-react';
 import { plannedTask, timingOf, type Task } from '../tasks';
 import { duration } from '../engine';
 export function Checklist({
@@ -11,9 +12,23 @@ export function Checklist({
   return (
     <fieldset className="checklist">
       <legend>
-        Các bước cần thực hiện · {steps.filter((s) => s.done).length}/
-        {steps.length}
+        <span className="checklist-title">
+          <span className="workspace-icon">
+            <ListTodo size={20} />
+          </span>
+          Các bước cần thực hiện
+        </span>
       </legend>
+      <div className="checklist-progress">
+        <span>
+          {steps.filter((s) => s.done).length}/{steps.length} hoàn thành
+        </span>
+        <progress
+          aria-label="Tiến độ checklist"
+          value={steps.filter((s) => s.done).length}
+          max={steps.length || 1}
+        />
+      </div>
       {steps.map((s, i) => (
         <div key={s.id} className="checklist-row">
           <input
@@ -50,7 +65,7 @@ export function Checklist({
               change({ checklist: next });
             }}
           >
-            ↑
+            <ArrowUp size={16} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -62,7 +77,7 @@ export function Checklist({
               change({ checklist: next });
             }}
           >
-            ↓
+            <ArrowDown size={16} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -71,7 +86,7 @@ export function Checklist({
               change({ checklist: steps.filter((x) => x.id !== s.id) })
             }
           >
-            ×
+            <Trash2 size={15} aria-hidden="true" />
           </button>
         </div>
       ))}
@@ -87,6 +102,7 @@ export function Checklist({
           })
         }
       >
+        <Plus size={17} aria-hidden="true" />
         Thêm bước
       </button>
     </fieldset>
