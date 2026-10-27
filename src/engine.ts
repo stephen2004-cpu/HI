@@ -71,7 +71,7 @@ export function record(
 ): RecordEntry {
   const s = current(r);
   return {
-    id: uid(),
+    id: r.focusRunId ? `${r.focusRunId}:${r.index}:${r.started}` : uid(),
     taskId: r.taskId,
     blockId: r.blockId,
     focusRunId: r.focusRunId,

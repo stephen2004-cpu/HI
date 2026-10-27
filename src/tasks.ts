@@ -1,3 +1,4 @@
+import * as workspaceStorage from './workspaceStorage';
 export const groups = [
   {
     id: 'do',
@@ -83,7 +84,7 @@ export function validTask(t: unknown): t is Task {
 }
 export function readTasks(): { tasks: Task[]; error: boolean } {
   try {
-    const raw = localStorage.getItem(TASK_KEY);
+    const raw = workspaceStorage.getItem(TASK_KEY);
     if (raw === null) return { tasks: [], error: false };
     const data = JSON.parse(raw);
     if (
@@ -100,7 +101,7 @@ export function readTasks(): { tasks: Task[]; error: boolean } {
 }
 export function writeTasks(tasks: Task[]): boolean {
   try {
-    localStorage.setItem(TASK_KEY, JSON.stringify({ version: 1, tasks }));
+    workspaceStorage.setItem(TASK_KEY, JSON.stringify({ version: 1, tasks }));
     if (typeof window !== 'undefined')
       window.dispatchEvent(new Event('lbd-tasks-updated'));
     return true;

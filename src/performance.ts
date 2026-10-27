@@ -1,3 +1,4 @@
+import * as workspaceStorage from './workspaceStorage';
 import type { RecordEntry } from './engine';
 export const reasons = [
   'Công việc nhiều hơn dự kiến',
@@ -20,27 +21,12 @@ export type Review = {
 export const REVIEW_KEY = 'lbd-focus-v2-reviews';
 export function loadReviews(): { reviews: Review[]; error: boolean } {
   try {
-    const raw = localStorage.getItem(REVIEW_KEY);
+    const raw = workspaceStorage.getItem(REVIEW_KEY);
     if (!raw) return { reviews: [], error: false };
     const x = JSON.parse(raw);
     if (
       !Array.isArray(x) ||
-      !x.every(
-        (r) =>
-          r &&
-          typeof r.runId === 'string' &&
-          typeof r.taskId === 'string' &&
-          Number.isFinite(r.at) &&
-          typeof r.completed === 'boolean' &&
-          typeof r.expectedMet === 'boolean' &&
-          typeof r.reason === 'string' &&
-          typeof r.comment === 'string' &&
-          typeof r.actualOutput === 'string' &&
-          Number.isFinite(r.planned) &&
-          r.planned >= 0 &&
-          Number.isFinite(r.actual) &&
-          r.actual >= 0,
-      ) ||
+      !x.every(validReview) ||
       new Set(x.map((r) => r.runId)).size !== x.length
     )
       throw Error();
@@ -51,7 +37,7 @@ export function loadReviews(): { reviews: Review[]; error: boolean } {
 }
 export function saveReviews(reviews: Review[]) {
   try {
-    localStorage.setItem(REVIEW_KEY, JSON.stringify(reviews));
+    workspaceStorage.setItem(REVIEW_KEY, JSON.stringify(reviews));
     if (typeof window !== 'undefined')
       window.dispatchEvent(new Event('lbd-reviews-updated'));
     return true;
@@ -137,4 +123,22 @@ export function suggestion(taskId: string, reviews: Review[]) {
     seconds: reason === reasons[1] ? undefined : seconds,
     count: samples.length,
   };
+}
+
+export function validReview(r: Review) {
+  return (
+    r &&
+    typeof r.runId === 'string' &&
+    typeof r.taskId === 'string' &&
+    Number.isFinite(r.at) &&
+    typeof r.completed === 'boolean' &&
+    typeof r.expectedMet === 'boolean' &&
+    typeof r.reason === 'string' &&
+    typeof r.comment === 'string' &&
+    typeof r.actualOutput === 'string' &&
+    Number.isFinite(r.planned) &&
+    r.planned >= 0 &&
+    Number.isFinite(r.actual) &&
+    r.actual >= 0
+  );
 }

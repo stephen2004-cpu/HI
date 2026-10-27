@@ -1,3 +1,4 @@
+import * as workspaceStorage from './workspaceStorage';
 import type { Task } from './tasks';
 import { groups } from './tasks';
 export type TimeBlock = {
@@ -43,7 +44,7 @@ export const validBlock = (b: TimeBlock) =>
   (b.color === '' || /^#[a-f\d]{6}$/i.test(b.color));
 export function loadPlanner(): { data: Planner; error: boolean } {
   try {
-    const raw = localStorage.getItem(PLANNER_KEY);
+    const raw = workspaceStorage.getItem(PLANNER_KEY);
     if (!raw) return { data: structuredClone(defaultPlanner), error: false };
     const x = JSON.parse(raw) as Planner;
     if (
@@ -64,7 +65,7 @@ export function loadPlanner(): { data: Planner; error: boolean } {
 }
 export function savePlanner(data: Planner): boolean {
   try {
-    localStorage.setItem(PLANNER_KEY, JSON.stringify(data));
+    workspaceStorage.setItem(PLANNER_KEY, JSON.stringify(data));
     return true;
   } catch {
     return false;

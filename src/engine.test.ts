@@ -113,3 +113,11 @@ it('does not count breaks or guess actual time for legacy runs', () => {
   delete run.measured;
   expect(record(run, 30000, 'stopped').actualSeconds).toBeUndefined();
 });
+
+it('uses the same record identity when two devices complete the same focus session', () => {
+  const r = begin('timer', defaults, false, 1000);
+  const a = record(r, r.deadline, 'completed'),
+    b = record(structuredClone(r), r.deadline, 'completed');
+  expect(a.id).toBe(b.id);
+  expect(a.actualSeconds).toBe(b.actualSeconds);
+});

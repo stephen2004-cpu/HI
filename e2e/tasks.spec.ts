@@ -34,6 +34,10 @@ test('task CRUD, colors, priority, completion and reload', async ({ page }) => {
 });
 test('legacy timer is preserved byte for byte', async ({ page }) => {
   await page.goto('/#Focus');
+  await expect(page.getByRole('timer')).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('lbd-focus-v2-timer')))
+    .not.toBeNull();
   const legacy = await page.evaluate(() =>
     localStorage.getItem('lbd-focus-v2-timer'),
   );

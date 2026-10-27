@@ -1,6 +1,6 @@
 # LBD Focus
 
-Ứng dụng quản lý thời gian bằng tiếng Việt cho **Lộc Boy Đảo**, xây dựng từ đầu với React 19, TypeScript và Vite. Giao diện than–kem–gold, responsive; không cần tài khoản, backend, API key hay dịch vụ trả phí.
+Ứng dụng quản lý thời gian bằng tiếng Việt cho **Lộc Boy Đảo**, xây dựng từ đầu với React 19, TypeScript và Vite. Giao diện than–kem–gold, responsive. Timer khách không cần tài khoản; đăng nhập và đồng bộ nhiều thiết bị dùng Supabase khi được cấu hình.
 
 ## Chạy trên máy
 
@@ -47,7 +47,7 @@ Playwright kiểm tra ở desktop 1440 × 1100 và mobile giả lập 390 × 844
 - Timer tính bằng `deadline - Date.now()`, không trừ dần theo số lần gọi `setInterval`. Interval 200 ms chỉ cập nhật giao diện; khi trở lại tab, tiến trình được đối chiếu ngay.
 - Khi tải lại: phiên đang chạy tiếp tục theo deadline cũ; phiên tạm dừng giữ thời gian còn lại. Chuỗi đã quá hạn được chuyển qua đúng các phiên đã hoàn thành và ghi lại thời điểm kết thúc theo lịch.
 - LocalStorage key: `lbd-focus-v1`, dữ liệu có phiên bản và kiểm tra cấu trúc khi đọc. Lưu thiết lập, bản sao chuỗi đang chạy và tối đa **1.000 bản ghi gần nhất**. Khi vắng mặt quá lâu trong chế độ lặp, các vòng ngoài cửa sổ lịch sử này được bỏ qua để tránh treo trình duyệt.
-- Dữ liệu gắn với trình duyệt và origin (domain + protocol + port), không đồng bộ thiết bị. Dùng một tab chạy timer để tránh các tab ghi đè cùng dữ liệu. Xóa dữ liệu trình duyệt sẽ xóa lịch sử. Khi LocalStorage bị chặn hoặc đầy, ứng dụng hiển thị cảnh báo và tiếp tục chạy trong bộ nhớ.
+- Dữ liệu khách gắn với trình duyệt và origin (domain + protocol + port); dữ liệu tài khoản có thể đồng bộ qua Supabase đã cấu hình. Dùng một tab chạy timer để tránh các tab ghi đè cùng dữ liệu. Xóa dữ liệu trình duyệt sẽ xóa lịch sử. Khi LocalStorage bị chặn hoặc đầy, ứng dụng hiển thị cảnh báo và tiếp tục chạy trong bộ nhớ.
 
 ## Giới hạn trình duyệt
 
@@ -100,7 +100,7 @@ Nếu repository đã có thay đổi từ người khác, kiểm tra/fetch và 
 1. Đẩy mã lên GitHub theo hướng dẫn trên.
 2. Trong Vercel chọn **Add New → Project**, kết nối GitHub và import `stephen2004-cpu/HI`.
 3. Framework preset: **Vite**. Root Directory: gốc repository. Install Command: `npm ci`. Build Command: `npm run build`. Output Directory: `dist`. Chọn Node.js **24.x**.
-4. Không cần Environment Variables. Chọn **Deploy**.
+4. Chế độ khách không cần biến môi trường. Auth cần `VITE_SUPABASE_URL` và `VITE_SUPABASE_PUBLISHABLE_KEY` cùng migration trong hướng dẫn bên dưới. Chỉ tạo **Preview** cho `feature/lbd-focus-v2`, không promote Production.
 5. Mở domain HTTPS được cấp, chạy một phiên 15 giây, kiểm tra âm thanh, khôi phục sau tải lại và CSV trên thiết bị của bạn.
 
 Đây là ứng dụng tĩnh một trang, không có client-side routing nên không cần cấu hình rewrite. Có thể triển khai bằng gói miễn phí phù hợp điều kiện sử dụng của bạn; ứng dụng không phụ thuộc API Vercel. Việc triển khai/public URL chưa được thực hiện trong workspace này.
@@ -212,7 +212,7 @@ Logo gốc hiển thị trong chat nhưng không được cung cấp thành tệ
 đọc trong workspace. Theo yêu cầu giữ nguyên logo cũ và favicon; không tự
 thiết kế lại. Cần cung cấp tệp PNG/SVG gốc để thay Header/favicon/mobile icon.
 Safari/iPhone thật và ngày DST cần kiểm tra thủ công. Chưa có đồng bộ nhiều
-tab, nhập lại JSON, lịch lặp tự động hoặc backend. Không dùng Supabase.
+tab vẫn cần kiểm tra thủ công. Các phần nhập JSON, lịch lặp và backend đã được bổ sung trong những mục cập nhật phía dưới.
 
 ## Focus visual refresh & Habit Tracker
 
@@ -300,3 +300,15 @@ Logo đính kèm vẫn chỉ có dạng ảnh hiển thị trong hội thoại; 
 có tệp PNG/SVG gốc và repository sau fetch cũng không có docs/design-references.
 Header/favicon giữ logo cũ, không tạo lại logo hoặc thay bằng ảnh minh họa.
 Không có manifest PWA hay cấu hình icon màn hình chính trong repository.
+
+## Supabase Auth — V2
+
+Có đăng ký/đăng nhập email và đăng xuất theo thiết bị. Timer khách vẫn hoạt
+động; dữ liệu khách/V1 không tự nhập vào tài khoản. Mỗi tài khoản dùng vùng
+cache riêng, các bảng máy chủ có User ID và RLS. Đồng bộ định kỳ có kiểm tra
+phiên bản để tránh ghi đè khi hai thiết bị sửa cùng lúc. Nhập dữ liệu khách
+hoặc tệp sao lưu JSON cần xác nhận và giữ bản gốc.
+
+Cần cấu hình Supabase Preview và chạy migration trước khi dùng đồng bộ thật.
+Xem [hướng dẫn Auth, RLS, dữ liệu cũ và kiểm thử](docs/supabase-auth.md).
+Không dùng service_role trong frontend; không tự cập nhật Production.

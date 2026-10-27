@@ -1,3 +1,4 @@
+import * as workspaceStorage from '../workspaceStorage';
 import { useState } from 'react';
 import type { Planner } from '../planner';
 export default function PlannerSettings({
@@ -62,8 +63,9 @@ export default function PlannerSettings({
       </p>
       <h2>Dữ liệu của bạn</h2>
       <p>
-        Dữ liệu được giữ trên trình duyệt hiện tại, chưa đồng bộ thiết bị. Nên
-        dùng một tab chỉnh sửa. Bản sao lưu có thể chứa tên và ghi chú cá nhân.
+        Dữ liệu khách chỉ ở trình duyệt; dữ liệu tài khoản được đồng bộ khi đã
+        cấu hình Supabase và có mạng. Nên dùng một tab chỉnh sửa. Bản sao lưu có
+        thể chứa tên và ghi chú cá nhân.
       </p>
       <button
         className="button primary"
@@ -77,7 +79,7 @@ export default function PlannerSettings({
                 'lbd-focus-v2-planner',
                 'lbd-focus-v2-reviews',
                 'lbd-focus-v2-habits',
-              ].map((k) => [k, localStorage.getItem(k)]),
+              ].map((k) => [k, workspaceStorage.getItem(k)]),
             );
             const url = URL.createObjectURL(
               new Blob(

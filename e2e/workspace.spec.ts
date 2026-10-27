@@ -138,6 +138,9 @@ test('overrun, unfinished status and numeric advice use measured data without re
   page,
 }) => {
   await page.goto('/');
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('lbd-focus-v2-timer')))
+    .not.toBeNull();
   await page.evaluate(() => {
     const t = {
       id: 't',

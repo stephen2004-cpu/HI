@@ -1,3 +1,4 @@
+import * as workspaceStorage from './workspaceStorage';
 import { addDays, dayStart, weekStart } from './planner';
 export type HabitStatus = 'done' | 'rest';
 export type Habit = {
@@ -22,41 +23,13 @@ export function validDate(s: string) {
 }
 export function loadHabits(): { habits: Habit[]; error: boolean } {
   try {
-    const raw = localStorage.getItem(HABIT_KEY);
+    const raw = workspaceStorage.getItem(HABIT_KEY);
     if (raw === null) return { habits: [], error: false };
     const x = JSON.parse(raw);
     if (
       x.version !== 1 ||
       !Array.isArray(x.habits) ||
-      !x.habits.every(
-        (h: Habit) =>
-          h &&
-          typeof h.id === 'string' &&
-          h.id &&
-          typeof h.name === 'string' &&
-          h.name.trim() &&
-          typeof h.category === 'string' &&
-          Array.isArray(h.days) &&
-          h.days.length > 0 &&
-          new Set(h.days).size === h.days.length &&
-          h.days.every((n) => Number.isInteger(n) && n >= 0 && n <= 6) &&
-          Number.isInteger(h.weeklyTarget) &&
-          h.weeklyTarget >= 1 &&
-          h.weeklyTarget <= h.days.length &&
-          Number.isInteger(h.minutes) &&
-          h.minutes >= 1 &&
-          h.minutes <= 1440 &&
-          typeof h.archived === 'boolean' &&
-          (h.resumeAfterArchive === undefined ||
-            typeof h.resumeAfterArchive === 'boolean') &&
-          (h.recurrence === undefined || validRecurrence(h.recurrence)) &&
-          h.logs &&
-          typeof h.logs === 'object' &&
-          !Array.isArray(h.logs) &&
-          Object.entries(h.logs).every(
-            ([d, s]) => validDate(d) && ['done', 'rest'].includes(s),
-          ),
-      ) ||
+      !x.habits.every(validHabit) ||
       new Set(x.habits.map((h: Habit) => h.id)).size !== x.habits.length
     )
       throw Error();
@@ -67,7 +40,7 @@ export function loadHabits(): { habits: Habit[]; error: boolean } {
 }
 export function saveHabits(habits: Habit[]) {
   try {
-    localStorage.setItem(HABIT_KEY, JSON.stringify({ version: 1, habits }));
+    workspaceStorage.setItem(HABIT_KEY, JSON.stringify({ version: 1, habits }));
     if (typeof window !== 'undefined')
       window.dispatchEvent(new Event('lbd-habits-updated'));
     return true;
@@ -268,4 +241,35 @@ export function restoreHabit(h: Habit, now = Date.now()): Habit {
     archived: false,
     resumeAfterArchive: undefined,
   };
+}
+
+export function validHabit(h: Habit) {
+  return (
+    h &&
+    typeof h.id === 'string' &&
+    h.id &&
+    typeof h.name === 'string' &&
+    h.name.trim() &&
+    typeof h.category === 'string' &&
+    Array.isArray(h.days) &&
+    h.days.length > 0 &&
+    new Set(h.days).size === h.days.length &&
+    h.days.every((n) => Number.isInteger(n) && n >= 0 && n <= 6) &&
+    Number.isInteger(h.weeklyTarget) &&
+    h.weeklyTarget >= 1 &&
+    h.weeklyTarget <= h.days.length &&
+    Number.isInteger(h.minutes) &&
+    h.minutes >= 1 &&
+    h.minutes <= 1440 &&
+    typeof h.archived === 'boolean' &&
+    (h.resumeAfterArchive === undefined ||
+      typeof h.resumeAfterArchive === 'boolean') &&
+    (h.recurrence === undefined || validRecurrence(h.recurrence)) &&
+    h.logs &&
+    typeof h.logs === 'object' &&
+    !Array.isArray(h.logs) &&
+    Object.entries(h.logs).every(
+      ([d, s]) => validDate(d) && ['done', 'rest'].includes(s),
+    )
+  );
 }

@@ -1,3 +1,4 @@
+import * as workspaceStorage from './workspaceStorage';
 import { type Snapshot, type Session, type Sound, defaults } from './engine';
 export type Settings = {
   hours: number;
@@ -35,14 +36,10 @@ const session = (s: Session) =>
   num(s.seconds, 359999) &&
   s.seconds >= 1 &&
   sounds.includes(s.sound);
-export function load(): Saved {
+export function parseSaved(value: unknown): Saved | null {
   try {
-    const x = JSON.parse(
-      localStorage.getItem('lbd-focus-v2-timer') ??
-        localStorage.getItem('lbd-focus-v1') ??
-        'null',
-    ) as Saved;
-    if (!x || x.version !== 1) return structuredClone(initial);
+    const x = structuredClone(value) as Saved;
+    if (!x || x.version !== 1) return null;
     const s = x.settings;
     if (
       !s ||
@@ -58,7 +55,7 @@ export function load(): Saved {
       typeof s.loop !== 'boolean' ||
       typeof s.muted !== 'boolean'
     )
-      return structuredClone(initial);
+      return null;
     const r = x.snapshot?.run;
     if (
       r &&
@@ -75,8 +72,8 @@ export function load(): Saved {
         !['running', 'paused'].includes(r.status) ||
         typeof r.loop !== 'boolean')
     )
-      return structuredClone(initial);
-    if (!Array.isArray(x.snapshot?.history)) return structuredClone(initial);
+      return null;
+    if (!Array.isArray(x.snapshot?.history)) return null;
     x.snapshot.history = x.snapshot.history
       .filter(
         (h) =>
@@ -118,12 +115,27 @@ export function load(): Saved {
     }
     return x;
   } catch {
+    return null;
+  }
+}
+export function load(): Saved {
+  try {
+    return (
+      parseSaved(
+        JSON.parse(
+          workspaceStorage.getItem('lbd-focus-v2-timer') ??
+            workspaceStorage.getItem('lbd-focus-v1') ??
+            'null',
+        ),
+      ) ?? structuredClone(initial)
+    );
+  } catch {
     return structuredClone(initial);
   }
 }
 export function save(value: Saved): boolean {
   try {
-    localStorage.setItem('lbd-focus-v2-timer', JSON.stringify(value));
+    workspaceStorage.setItem('lbd-focus-v2-timer', JSON.stringify(value));
     return true;
   } catch {
     return false;
