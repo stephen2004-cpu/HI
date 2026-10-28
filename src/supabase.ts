@@ -1,4 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
+import { recoveryLocation } from './recovery';
+// Snapshot first: initialize() can remove the fragment before React subscribes.
+export const recoveryCallback = recoveryLocation(window.location.href);
 const config = import.meta.env as Record<string, string | undefined>;
 const url = config.VITE_SUPABASE_URL,
   key = config.VITE_SUPABASE_PUBLISHABLE_KEY;

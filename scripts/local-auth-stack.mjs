@@ -4,6 +4,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomBytes, createHmac } from 'node:crypto';
 import http from 'node:http';
+import net from 'node:net';
 const root = '/tmp/lbd-auth-stack';
 mkdirSync(root, { recursive: true, mode: 0o700 });
 const password = randomBytes(24).toString('hex'),
@@ -28,6 +29,53 @@ const env = (name, values) => {
   );
   return path;
 };
+// Private, local SMTP capture for recovery-email integration tests. No mail is
+// delivered externally and no email body/token is printed to stdout.
+writeFileSync(`${root}/mailbox.json`, '[]', { mode: 0o600 });
+const mailbox = [];
+const smtp = net.createServer((socket) => {
+  socket.setEncoding('utf8');
+  socket.write('220 local-test SMTP ready\r\n');
+  let buffer = '',
+    data = false,
+    lines = [],
+    recipient = '';
+  socket.on('data', (chunk) => {
+    buffer += chunk;
+    let end;
+    while ((end = buffer.indexOf('\r\n')) >= 0) {
+      const line = buffer.slice(0, end);
+      buffer = buffer.slice(end + 2);
+      if (data) {
+        if (line === '.') {
+          mailbox.push({ recipient, raw: lines.join('\r\n') });
+          writeFileSync(`${root}/mailbox.json`, JSON.stringify(mailbox), {
+            mode: 0o600,
+          });
+          data = false;
+          lines = [];
+          socket.write('250 Message captured\r\n');
+        } else lines.push(line.startsWith('..') ? line.slice(1) : line);
+      } else if (/^EHLO/i.test(line))
+        socket.write('250-local-test\r\n250 8BITMIME\r\n');
+      else if (/^DATA/i.test(line)) {
+        data = true;
+        socket.write('354 End with dot\r\n');
+      } else if (/^QUIT/i.test(line)) socket.end('221 Bye\r\n');
+      else {
+        if (/^RCPT TO:/i.test(line))
+          recipient = line.slice(8).trim().replace(/[<>]/g, '');
+        socket.write('250 OK\r\n');
+      }
+    }
+  });
+  socket.on('error', () => {});
+});
+await new Promise((resolve, reject) => {
+  smtp.once('error', reject);
+  smtp.listen(54328, '0.0.0.0', resolve);
+});
+
 try {
   docker(['network', 'create', 'lbd-auth-test']);
 } catch {}
@@ -74,6 +122,8 @@ docker([
   '-d',
   '--name',
   'lbd-auth-gotrue',
+  '--add-host',
+  'host.docker.internal:host-gateway',
   '--network',
   'lbd-auth-test',
   '-p',
@@ -94,6 +144,12 @@ docker([
     GOTRUE_DISABLE_SIGNUP: 'false',
     GOTRUE_EXTERNAL_EMAIL_ENABLED: 'true',
     GOTRUE_MAILER_AUTOCONFIRM: 'true',
+    GOTRUE_SMTP_HOST: 'host.docker.internal',
+    GOTRUE_SMTP_PORT: '54328',
+    GOTRUE_SMTP_ADMIN_EMAIL: 'auth@lbd-local.test',
+    GOTRUE_SMTP_SENDER_NAME: 'LBD Local Test',
+    GOTRUE_SMTP_MAX_FREQUENCY: '1s',
+    GOTRUE_MAILER_URLPATHS_RECOVERY: '/auth/v1/verify',
     GOTRUE_RATE_LIMIT_EMAIL_SENT: '1000',
     GOTRUE_RATE_LIMIT_TOKEN_REFRESH: '1000',
     GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED: 'true',
@@ -179,14 +235,16 @@ const server = http.createServer((req, res) => {
   );
   res.setHeader(
     'Access-Control-Allow-Methods',
-    'GET,POST,PATCH,DELETE,OPTIONS',
+    'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   );
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
     return;
   }
-  if (req.headers.apikey !== anon) {
+  const emailVerification =
+    req.method === 'GET' && req.url.startsWith('/auth/v1/verify?');
+  if (req.headers.apikey !== anon && !emailVerification) {
     res.writeHead(401);
     res.end();
     return;

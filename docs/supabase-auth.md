@@ -129,3 +129,66 @@ docker network rm lbd-auth-test
 Stop the `local-auth-stack.mjs` process as well. Restarting the script resets
 only these isolated test containers and their test users. Do not use their
 names for an unrelated database.
+
+## Password recovery (V2)
+
+The login panel includes **Quên mật khẩu?**. It calls
+`resetPasswordForEmail(email, { redirectTo: <current-origin>/<current-path>?auth=recovery })`.
+The generic success message does not disclose whether an email is registered.
+Rate limits and network failures have safe messages, with no raw backend errors.
+
+`PasswordRecovery` wraps the account app. A callback is captured **before** SDK
+initialization removes URL fragments. `PASSWORD_RECOVERY` opens the dedicated
+**Đặt mật khẩu mới** screen; Calendar/account sync are not mounted during recovery.
+The screen validates matching passwords (minimum eight characters), validates the
+current account session, then calls `auth.updateUser({ password })`. Server-side
+password policy remains authoritative. Success is explicit, followed by a button
+to end the local recovery session and open login with the new password.
+
+The existing implicit email flow supports opening email links in a different
+browser. Old implicit links with `type=recovery` and no query marker are also
+recognized. Explicit `?auth=recovery&code=...` callbacks are exchanged once when
+the matching PKCE verifier exists in this browser. A missing verifier is an
+invalid link, never a fallback to an unrelated existing login. PKCE links must
+be opened in the browser that requested them. Hash-only navigation to an
+already-open callback page is reinitialized. Refreshing a verified recovery
+screen retains that screen using a tab-scoped user-ID marker (no token/password
+in that marker); an unauthenticated marker alone grants nothing.
+
+Expired, reused, malformed and missing-credential links show the invalid-link
+screen with a route back to request a fresh email. Credentials and callback error
+parameters are removed from the address bar after SDK processing. Passwords,
+tokens, raw auth errors and email bodies are never logged by the application.
+No workspace/legacy storage keys are deleted or reset by this flow.
+
+### Manual Preview configuration and acceptance check
+
+1. In Supabase **Authentication → URL Configuration → Redirect URLs**, add the
+   exact new Vercel Preview callback URL, including `/?auth=recovery` (or the
+   corresponding app base path). Permit the Preview root for older links if
+   needed. Prefer a stable branch Preview URL when available. An unallowed
+   redirect can fall back to Site URL, which may still point at V1.
+   **Do not change the production Site URL or V1 settings.** Use a separate
+   development Supabase project when changing configuration/templates for tests.
+2. Check the **Reset Password** email template uses `{{ .ConfirmationURL }}`
+   for its link, rather than linking directly to `{{ .SiteURL }}` without Auth
+   verification. This implementation uses Supabase's standard verification
+   redirect; it does not define a custom `token_hash` verification endpoint.
+3. Confirm the two existing public Vite Supabase variables are set for **Vercel
+   Preview**, then build/redeploy branch `feature/lbd-focus-v2` only. No SQL
+   migration or new secret is needed for this password-recovery change.
+4. Open the new Preview, select login → **Quên mật khẩu?**, request a **new** email
+   and check spam. Follow its latest link. Confirm the browser remains on Preview
+   and shows **Đặt mật khẩu mới**, save a new password, return to login and use it.
+5. Check existing Task/Calendar/Habit/Focus history, a failed/reused link, and
+   both MacBook/iPhone. Local automated tests emulate desktop/mobile Chromium;
+   real device/Safari, hosted SMTP delivery and the managed Supabase project
+   require this separate acceptance check.
+
+Local test stack now captures SMTP in a private test-only mailbox under `/tmp`;
+no email is sent externally. The recovery integration suite requests real Auth
+emails, follows their verification links, changes the password and logs in again.
+It covers desktop/mobile, implicit and PKCE redirects, form reload, hash-only
+callback, confirmation mismatch, policy/update failure, expired sessions,
+invalid/reused links, rate limits and unchanged application LocalStorage.
+Do not print the private mailbox or use the local SMTP harness for real mail.

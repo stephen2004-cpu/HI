@@ -29,8 +29,10 @@ export default function AccountApp() {
     [generation, setGeneration] = useState(0),
     [status, setStatus] = useState<SyncStatus>('loading'),
     [syncMessage, setSyncMessage] = useState(''),
-    [open, setOpen] = useState(false),
-    [mode, setMode] = useState<'login' | 'signup'>('login'),
+    [open, setOpen] = useState(
+      new URLSearchParams(location.search).get('auth') === 'login',
+    ),
+    [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login'),
     [email, setEmail] = useState(''),
     [password, setPassword] = useState(''),
     [message, setMessage] = useState(''),
@@ -120,6 +122,25 @@ export default function AccountApp() {
     setBusy(true);
     setMessage('');
     try {
+      if (mode === 'reset') {
+        const redirect = new URL(location.pathname, location.origin);
+        redirect.searchParams.set('auth', 'recovery');
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: redirect.toString(),
+        });
+        if (error) {
+          setMessage(
+            error.status === 429
+              ? 'Bạn đã gửi quá nhiều yêu cầu. Hãy chờ một lúc rồi thử lại.'
+              : 'Chưa gửi được yêu cầu khôi phục. Kiểm tra kết nối và thử lại.',
+          );
+        } else {
+          setMessage(
+            'Nếu email thuộc tài khoản đã đăng ký, bạn sẽ nhận được liên kết đặt mật khẩu mới. Hãy kiểm tra cả thư rác và mở liên kết mới nhất.',
+          );
+        }
+        return;
+      }
       const { error, data } =
         mode === 'signup'
           ? await supabase.auth.signUp({
@@ -137,7 +158,9 @@ export default function AccountApp() {
       );
     } catch {
       setMessage(
-        'Không đăng nhập/đăng ký được. Kiểm tra email, mật khẩu, email xác nhận và cấu hình dự án.',
+        mode === 'reset'
+          ? 'Chưa gửi được yêu cầu khôi phục. Kiểm tra kết nối và thử lại.'
+          : 'Không đăng nhập/đăng ký được. Kiểm tra email, mật khẩu và email xác nhận. Nếu quên mật khẩu, chọn Quên mật khẩu.',
       );
     } finally {
       setBusy(false);
@@ -400,7 +423,13 @@ export default function AccountApp() {
             </>
           ) : (
             <>
-              <h2>{mode === 'login' ? 'Đăng nhập' : 'Đăng ký'}</h2>
+              <h2>
+                {mode === 'reset'
+                  ? 'Quên mật khẩu'
+                  : mode === 'login'
+                    ? 'Đăng nhập'
+                    : 'Đăng ký'}
+              </h2>
               {!supabase && (
                 <p role="alert">
                   Chưa cấu hình Supabase. Cần VITE_SUPABASE_URL và
@@ -439,25 +468,42 @@ export default function AccountApp() {
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </label>
-                <label>
-                  Mật khẩu
-                  <input
-                    type="password"
-                    required
-                    minLength={8}
-                    value={password}
-                    autoComplete={
-                      mode === 'signup' ? 'new-password' : 'current-password'
-                    }
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </label>
+                {mode !== 'reset' && (
+                  <label>
+                    Mật khẩu
+                    <input
+                      type="password"
+                      required
+                      minLength={8}
+                      value={password}
+                      autoComplete={
+                        mode === 'signup' ? 'new-password' : 'current-password'
+                      }
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  </label>
+                )}
                 <button className="button primary" disabled={!supabase || busy}>
-                  {mode === 'login'
-                    ? 'Đăng nhập bằng email'
-                    : 'Tạo tài khoản email'}
+                  {mode === 'reset'
+                    ? 'Gửi email khôi phục'
+                    : mode === 'login'
+                      ? 'Đăng nhập bằng email'
+                      : 'Tạo tài khoản email'}
                 </button>
               </form>
+              {mode === 'login' && (
+                <button
+                  className="text-button"
+                  disabled={busy}
+                  onClick={() => {
+                    setMode('reset');
+                    setPassword('');
+                    setMessage('');
+                  }}
+                >
+                  Quên mật khẩu?
+                </button>
+              )}
               <p>
                 Dữ liệu khách không tự gửi lên tài khoản. Google chưa được bật.
               </p>
