@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowUpRight,
   Bell,
@@ -32,9 +33,10 @@ import {
   type Mode,
   type Run,
   type Snapshot,
+  type Sound,
 } from './engine';
 import { load, save, type Saved } from './storage';
-import { playSound, unlockAudio } from './audio';
+import { playSound, unlockAudio, startAlarm, stopAlarm } from './audio';
 import SessionEditor from './components/SessionEditor';
 import History from './components/History';
 import TaskBoard from './components/TaskBoard';
@@ -229,6 +231,9 @@ export default function App() {
             ...planner.blocks,
             {
               id: blockId,
+              ...(habit.recurrence
+                ? { recurringHabitId: habit.id, habitDate: date }
+                : {}),
               taskId: id,
               title: habit.name,
               start,
@@ -255,6 +260,29 @@ export default function App() {
   );
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState('');
+  const [alarm, setAlarm] = useState<{ message: string; sound: Sound } | null>(
+    null,
+  );
+  const alarmNotification = useRef<Notification | null>(null);
+  const silenceAlarm = () => {
+    stopAlarm();
+    setAlarm(null);
+    alarmNotification.current?.close();
+    alarmNotification.current = null;
+  };
+  useEffect(() => {
+    if (alarm)
+      startAlarm(alarm.sound, data.settings.muted ? 0 : data.settings.volume);
+    else stopAlarm();
+    return stopAlarm;
+  }, [alarm, data.settings.muted, data.settings.volume]);
+  useEffect(
+    () => () => {
+      stopAlarm();
+      alarmNotification.current?.close();
+    },
+    [],
+  );
   const [storageError, setStorageError] = useState(false);
   const [confirm, setConfirm] = useState<'stop' | 'clear' | null>(null);
   const [notifications, setNotifications] = useState(false);
@@ -353,11 +381,11 @@ export default function App() {
         dataRef.current = next;
         setData(next);
         const finished = result.completed[result.completed.length - 1];
-        playSound(finished.sound, d.settings.muted ? 0 : d.settings.volume);
         const nextRun = result.snapshot.run;
         const message = nextRun
           ? `Đã hoàn thành ${finished.name}. Tiếp theo: ${current(nextRun).name}.`
           : `Đã hoàn thành ${finished.name}. Bạn đã làm rất tốt!`;
+        setAlarm({ message, sound: finished.sound });
         setNotice(
           result.omitted
             ? `${message} Một số vòng lặp khi vắng mặt đã được bỏ qua.`
@@ -369,7 +397,19 @@ export default function App() {
           Notification.permission === 'granted'
         ) {
           try {
-            new Notification('LBD Focus', { body: message });
+            alarmNotification.current?.close();
+            // Page notifications do not support action buttons consistently. Clicking
+            // this notification acknowledges the same alarm as the in-page button.
+            const notification = new Notification('LBD Focus — Tắt chuông', {
+              body: message + ' Nhấn thông báo để tắt chuông.',
+              tag: 'lbd-focus-alarm',
+              silent: true,
+            });
+            notification.onclick = () => {
+              window.focus();
+              silenceAlarm();
+            };
+            alarmNotification.current = notification;
           } catch {
             /* In-page announcement remains available. */
           }
@@ -1042,11 +1082,12 @@ export default function App() {
                         className="text-button sound-test"
                         onClick={async () => {
                           if (await unlockAudio())
-                            playSound('bell', s.muted ? 0 : s.volume);
-                          else
-                            announce(
-                              'Trình duyệt chưa cho phép phát âm thanh.',
-                            );
+                            if (!alarm)
+                              playSound('bell', s.muted ? 0 : s.volume);
+                            else
+                              announce(
+                                'Trình duyệt chưa cho phép phát âm thanh.',
+                              );
                         }}
                       >
                         Nghe thử
@@ -1123,6 +1164,28 @@ export default function App() {
         Giữ trang mở để nhận âm báo. Trình duyệt đóng hoặc thiết bị ngủ có thể
         làm gián đoạn thông báo.
       </div>
+      {alarm &&
+        createPortal(
+          <section
+            className="alarm-banner"
+            role="alert"
+            aria-label="Thông báo hết giờ"
+          >
+            <div>
+              <strong>Đã hết giờ</strong>
+              <p>{alarm.message}</p>
+              <small>
+                {s.muted || s.volume === 0 || alarm.sound === 'silent'
+                  ? 'Âm thanh đang tắt.'
+                  : 'Chuông lặp đến khi bạn tắt. Trình duyệt có thể hạn chế âm thanh khi chạy nền hoặc khóa màn hình.'}
+              </small>
+            </div>
+            <button className="button primary" onClick={silenceAlarm}>
+              Tắt chuông
+            </button>
+          </section>,
+          document.fullscreenElement ?? document.body,
+        )}
       {notice && (
         <div className="toast" role="status">
           <span className="toast-dot" />

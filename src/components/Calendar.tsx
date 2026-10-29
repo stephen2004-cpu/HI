@@ -33,6 +33,19 @@ export default function Calendar({
   locked,
 }: Props) {
   const [miniOpen, setMiniOpen] = useState(() => window.innerWidth > 800);
+  const [completion, setCompletion] = useState('all');
+  const blocks = planner.blocks.filter(
+    (b) =>
+      completion === 'all' ||
+      (completion === 'done') ===
+        !!tasks.find((t) => t.id === b.taskId)?.completed,
+  );
+  const isCompleted = (taskId: string) =>
+    !!tasks.find((t) => t.id === taskId)?.completed;
+  const completedLabel = (taskId: string) =>
+    isCompleted(taskId) ? (
+      <span className="block-completed-label">✓ Đã hoàn thành</span>
+    ) : null;
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   const [date, setDate] = useState(
     dayStart(initialDate ? new Date(`${initialDate}T12:00:00`) : new Date()),
@@ -269,8 +282,21 @@ export default function Calendar({
               →
             </button>
             <label>
+              Trạng thái Task
+              <select
+                aria-label="Trạng thái Task"
+                value={completion}
+                onChange={(e) => setCompletion(e.target.value)}
+              >
+                <option value="all">Tất cả</option>
+                <option value="pending">Chưa hoàn thành</option>
+                <option value="done">Đã hoàn thành</option>
+              </select>
+            </label>
+            <label>
               Chế độ lịch
               <select
+                aria-label="Chế độ lịch"
                 value={view}
                 onChange={(e) => setView(e.target.value as typeof view)}
               >
@@ -310,19 +336,26 @@ export default function Calendar({
                 >
                   {shortDate(d)}
                 </button>
-                {planner.blocks
+                {blocks
                   .filter((b) => b.start < +addDays(d, 1) && b.end > +d)
                   .map((b) => (
                     <button
-                      className="month-block"
+                      className={`month-block ${isCompleted(b.taskId) ? 'task-completed' : ''}`}
                       key={b.id}
                       style={{ borderLeftColor: blockColor(b, tasks) }}
                       onClick={() => {
                         focusTask(b.taskId, b.id);
                       }}
                     >
-                      {tasks.find((t) => t.id === b.taskId)?.title || b.title} ·{' '}
+                      {completedLabel(b.taskId)}
+                      {tasks.find((t) => t.id === b.taskId)?.title ||
+                        b.title} ·{' '}
                       {new Date(b.start).toLocaleTimeString('vi-VN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}{' '}
+                      –{' '}
+                      {new Date(b.end).toLocaleTimeString('vi-VN', {
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
@@ -375,14 +408,15 @@ export default function Calendar({
                       }}
                     />
                   ))}
-                  {layoutDay(planner.blocks, d).map(
+                  {layoutDay(blocks, d).map(
                     ({ block: b, top, height, lane, lanes }) => (
                       <div
                         key={b.id}
                         role="button"
                         tabIndex={0}
                         aria-label={`Time Block ${tasks.find((t) => t.id === b.taskId)?.title || b.title}`}
-                        className="time-block"
+                        title={`${isCompleted(b.taskId) ? '✓ Đã hoàn thành · ' : ''}${tasks.find((t) => t.id === b.taskId)?.title || b.title} · ${new Date(b.start).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} – ${new Date(b.end).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`}
+                        className={`time-block ${isCompleted(b.taskId) ? 'task-completed' : ''}`}
                         style={{
                           top,
                           height,
@@ -415,6 +449,7 @@ export default function Calendar({
                         >
                           ✎
                         </button>
+                        {completedLabel(b.taskId)}
                         <span
                           className="priority-tag"
                           style={{

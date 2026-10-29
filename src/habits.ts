@@ -2,6 +2,8 @@ import * as workspaceStorage from './workspaceStorage';
 import { addDays, dayStart, weekStart } from './planner';
 export type HabitStatus = 'done' | 'rest';
 export type Habit = {
+  deletedAt?: number;
+  deletedHistory?: boolean;
   resumeAfterArchive?: boolean;
   recurrence?: HabitRecurrence;
   id: string;
@@ -50,6 +52,7 @@ export function saveHabits(habits: Habit[]) {
 }
 export function cycleLog(h: Habit, date: string, today = new Date()): Habit {
   if (
+    h.deletedAt !== undefined ||
     h.archived ||
     !validDate(date) ||
     date > localDate(today) ||
@@ -202,7 +205,8 @@ export function endHabit(h: Habit, now = Date.now()): Habit {
   return { ...h, recurrence: { ...h.recurrence, endedAt: now } };
 }
 export function habitOccurrence(h: Habit, date: string) {
-  if (!h.recurrence || !validDate(date)) return undefined;
+  if (h.deletedAt !== undefined || !h.recurrence || !validDate(date))
+    return undefined;
   const rule = [...h.recurrence.rules]
     .reverse()
     .find((r) => r.effectiveDate <= date);
@@ -229,6 +233,7 @@ export function habitOccurrence(h: Habit, date: string) {
 }
 
 export function archiveHabit(h: Habit, now = Date.now()): Habit {
+  if (h.deletedAt !== undefined) return h;
   return {
     ...pauseHabit(h, now),
     archived: true,
@@ -236,6 +241,7 @@ export function archiveHabit(h: Habit, now = Date.now()): Habit {
   };
 }
 export function restoreHabit(h: Habit, now = Date.now()): Habit {
+  if (h.deletedAt !== undefined) return h;
   return {
     ...(h.resumeAfterArchive ? resumeHabit(h, now) : h),
     archived: false,
@@ -262,6 +268,9 @@ export function validHabit(h: Habit) {
     h.minutes >= 1 &&
     h.minutes <= 1440 &&
     typeof h.archived === 'boolean' &&
+    (h.deletedAt === undefined ||
+      (Number.isSafeInteger(h.deletedAt) && h.deletedAt > 0)) &&
+    (h.deletedHistory === undefined || typeof h.deletedHistory === 'boolean') &&
     (h.resumeAfterArchive === undefined ||
       typeof h.resumeAfterArchive === 'boolean') &&
     (h.recurrence === undefined || validRecurrence(h.recurrence)) &&
@@ -272,4 +281,30 @@ export function validHabit(h: Habit) {
       ([d, s]) => validDate(d) && ['done', 'rest'].includes(s),
     )
   );
+}
+
+// Tombstones are intentionally retained for sync/import protection, never as an active habit.
+export function deleteHabit(
+  h: Habit,
+  eraseHistory = false,
+  now = Date.now(),
+): Habit {
+  if (h.deletedAt !== undefined) return h;
+  return {
+    ...endHabit(h, now),
+    archived: true,
+    deletedAt: now,
+    deletedHistory: eraseHistory,
+    logs: eraseHistory ? {} : { ...h.logs },
+    resumeAfterArchive: false,
+  };
+}
+export function mergeHabitDeletions(local: Habit[], remote: Habit[]): Habit[] {
+  const deleted = new Map(
+    remote.filter((h) => h.deletedAt !== undefined).map((h) => [h.id, h]),
+  );
+  return [
+    ...local.map((h) => deleted.get(h.id) ?? h),
+    ...[...deleted.values()].filter((h) => !local.some((x) => x.id === h.id)),
+  ];
 }

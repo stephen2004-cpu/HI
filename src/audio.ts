@@ -9,6 +9,16 @@ export async function unlockAudio() {
     return false;
   }
 }
+const voices = new Set<OscillatorNode>();
+export function stopSound() {
+  for (const osc of voices) {
+    try {
+      osc.stop();
+      osc.disconnect();
+    } catch {}
+  }
+  voices.clear();
+}
 export function playSound(sound: Sound, volume: number) {
   if (
     !context ||
@@ -28,6 +38,12 @@ export function playSound(sound: Sound, volume: number) {
     const osc = ctx.createOscillator(),
       gain = ctx.createGain(),
       at = ctx.currentTime + i * 0.3;
+    voices.add(osc);
+    osc.onended = () => {
+      voices.delete(osc);
+      osc.disconnect();
+      gain.disconnect();
+    };
     osc.type = sound === 'digital' ? 'triangle' : 'sine';
     osc.frequency.value = frequency;
     gain.gain.setValueAtTime(0, at);
@@ -38,4 +54,19 @@ export function playSound(sound: Sound, volume: number) {
     osc.start(at);
     osc.stop(at + 0.7);
   });
+}
+
+let alarmInterval: ReturnType<typeof setInterval> | undefined;
+export function stopAlarm() {
+  clearInterval(alarmInterval);
+  alarmInterval = undefined;
+  stopSound();
+}
+export function startAlarm(sound: Sound, volume: number) {
+  stopAlarm();
+  if (sound === 'silent' || volume <= 0) return;
+  const pulse = () => playSound(sound, volume);
+  pulse();
+  // A phrase lasts <= 1.3 seconds, so phrases do not overlap.
+  alarmInterval = setInterval(pulse, 1800);
 }

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { supabase } from '../supabase';
+import { workspaceUser } from '../workspaceStorage';
 import {
   Check,
   Moon,
@@ -24,6 +26,7 @@ import {
   endHabit,
   archiveHabit,
   restoreHabit,
+  deleteHabit,
 } from '../habits';
 const blank: Omit<Habit, 'id' | 'logs'> = {
   name: '',
@@ -51,6 +54,9 @@ export default function HabitTracker({
     [view, setView] = useState<'week' | 'month'>('week'),
     [date, setDate] = useState(new Date()),
     [showArchived, setShowArchived] = useState(false),
+    [deleting, setDeleting] = useState<string | null>(null),
+    [eraseHistory, setEraseHistory] = useState(false),
+    [deletingBusy, setDeletingBusy] = useState(false),
     [occurrence, setOccurrence] = useState(localDate(new Date())),
     [automatic, setAutomatic] = useState(true),
     [scheduleTime, setScheduleTime] = useState('09:00'),
@@ -250,7 +256,126 @@ export default function HabitTracker({
             Hủy sửa thói quen
           </button>
         )}
+        {editing && (
+          <button
+            type="button"
+            className="button danger"
+            disabled={loaded.error}
+            onClick={() => {
+              setDeleting(editing);
+              setEraseHistory(false);
+            }}
+          >
+            Xóa vĩnh viễn
+          </button>
+        )}
       </form>
+      {deleting && (
+        <div className="modal-backdrop">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-habit-title"
+            className="block-editor habit-delete-dialog"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && !deletingBusy) setDeleting(null);
+              if (e.key === 'Tab') {
+                const els = e.currentTarget.querySelectorAll<HTMLElement>(
+                  'button:not(:disabled),input',
+                );
+                const first = els[0],
+                  last = els[els.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                  e.preventDefault();
+                  last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                  e.preventDefault();
+                  first.focus();
+                }
+              }
+            }}
+          >
+            <h2 id="delete-habit-title">Xóa vĩnh viễn thói quen?</h2>
+            <p>
+              “{habits.find((h) => h.id === deleting)?.name}” sẽ không thể khôi
+              phục. Dừng toàn bộ lịch lặp và ẩn các Time Block tự động trong
+              tương lai. Task độc lập và Focus History được giữ nguyên.
+            </p>
+            <p>
+              Mặc định giữ lịch sử đánh dấu trong bản ghi đã xóa để có thể xuất
+              sao lưu, không hiển thị trong danh sách thói quen.
+            </p>
+            <label className="import-consent">
+              <input
+                type="checkbox"
+                checked={eraseHistory}
+                disabled={deletingBusy}
+                onChange={(e) => setEraseHistory(e.target.checked)}
+              />
+              Xóa cả lịch sử đánh dấu thói quen
+            </label>
+            <button
+              autoFocus
+              className="button outline"
+              disabled={deletingBusy}
+              onClick={() => setDeleting(null)}
+            >
+              Hủy xóa
+            </button>
+            <button
+              className="button danger"
+              disabled={deletingBusy}
+              onClick={async () => {
+                if (
+                  eraseHistory &&
+                  !window.confirm(
+                    'Xác nhận lần hai: xóa cả lịch sử đánh dấu của thói quen này? Focus Session vẫn được giữ.',
+                  )
+                )
+                  return;
+                const scope = workspaceUser();
+                if (scope) {
+                  setDeletingBusy(true);
+                  try {
+                    const result = await supabase?.rpc(
+                      'lbd_habit_deletion_capabilities',
+                    );
+                    if (workspaceUser() !== scope) return;
+                    if (!result || result.error || result.data !== 1) {
+                      setError(
+                        'Chưa thể xóa vĩnh viễn: cần kết nối và migration bảo vệ dấu xóa trên Supabase. Chưa thay đổi thói quen.',
+                      );
+                      setDeleting(null);
+                      return;
+                    }
+                  } catch {
+                    setError(
+                      'Chưa kết nối được máy chủ để bảo vệ dấu xóa. Chưa thay đổi thói quen.',
+                    );
+                    setDeleting(null);
+                    return;
+                  } finally {
+                    setDeletingBusy(false);
+                  }
+                }
+                if (
+                  commit(
+                    habits.map((h) =>
+                      h.id === deleting ? deleteHabit(h, eraseHistory) : h,
+                    ),
+                  )
+                ) {
+                  setDeleting(null);
+                  setEditing(null);
+                  setDraft(blank);
+                }
+              }}
+            >
+              Xác nhận xóa vĩnh viễn
+            </button>
+          </section>
+        </div>
+      )}
       <div className="habit-toolbar">
         <div>
           <button
@@ -332,7 +457,10 @@ export default function HabitTracker({
           </thead>
           <tbody>
             {habits
-              .filter((h) => showArchived || !h.archived)
+              .filter(
+                (h) =>
+                  h.deletedAt === undefined && (showArchived || !h.archived),
+              )
               .map((h) => {
                 const p = habitProgress(h, date);
                 return (
@@ -416,7 +544,7 @@ export default function HabitTracker({
           </tbody>
         </table>
       </div>
-      {!habits.length && (
+      {!habits.some((h) => h.deletedAt === undefined) && (
         <p className="habit-empty">
           Chưa có thói quen. Tạo thói quen của bạn để bắt đầu.
         </p>
@@ -451,7 +579,7 @@ export default function HabitTracker({
           />
         </label>
         {habits
-          .filter((h) => !h.archived)
+          .filter((h) => h.deletedAt === undefined && !h.archived)
           .map((h) => (
             <div className="habit-connect-row" key={h.id}>
               <strong>

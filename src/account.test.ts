@@ -196,3 +196,23 @@ it('acknowledges identical concurrent results without losing edits or duplicatin
   expect(readMeta('a')).toEqual({ revision: 2, dirty: false });
   e.stop();
 });
+
+it('explicit backup import never restores a permanently deleted habit or its erased log', async () => {
+  const { deleteHabit } = await import('./habits');
+  const account = emptyWorkspace(),
+    guest = emptyWorkspace();
+  const habit = {
+    id: 'deleted',
+    name: 'Old habit',
+    category: 'Cá nhân',
+    days: [1],
+    weeklyTarget: 1,
+    minutes: 25,
+    archived: false,
+    logs: { '2026-10-26': 'done' as const },
+  };
+  guest.habits.habits = [habit];
+  account.habits.habits = [deleteHabit(habit, true, 1234)];
+  expect(mergeGuest(account, guest).habits.habits[0].logs).toEqual({});
+  expect(mergeGuest(guest, account).habits.habits[0].deletedAt).toBe(1234);
+});

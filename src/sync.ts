@@ -1,3 +1,4 @@
+import { mergeHabitDeletions } from './habits';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   backupAccount,
@@ -50,6 +51,20 @@ export class WorkspaceSync {
       throw Error('Dữ liệu máy chủ không hợp lệ hoặc khác phiên bản.');
     return data as { revision: number; payload: Workspace | null };
   }
+  private retainRemoteDeletions(payload: Workspace | null) {
+    if (!payload?.habits.habits.some((h) => h.deletedAt !== undefined))
+      return false;
+    const local = readWorkspace(this.id);
+    const habits = mergeHabitDeletions(
+      local.habits.habits,
+      payload.habits.habits,
+    );
+    if (JSON.stringify(habits) === JSON.stringify(local.habits.habits))
+      return false;
+    backupAccount(this.id, local);
+    storeWorkspace(this.id, { ...local, habits: { version: 1, habits } });
+    return true;
+  }
   async start() {
     try {
       recoverIncoming(this.id);
@@ -57,19 +72,27 @@ export class WorkspaceSync {
         remote = await this.remote();
       if (this.stopped) return;
       if (local.dirty) {
+        const deletedChanged = this.retainRemoteDeletions(remote.payload);
         if (remote.revision !== local.revision)
           this.notify(
             'conflict',
-            'Có thay đổi trên thiết bị khác. Bản cục bộ được giữ nguyên.',
+            'Có thay đổi trên thiết bị khác. Giữ các thay đổi cục bộ còn lại và dấu xóa vĩnh viễn từ máy chủ.',
+            deletedChanged,
           );
-        else this.notify('pending', 'Có thay đổi đang chờ đồng bộ.');
+        else
+          this.notify(
+            'pending',
+            'Có thay đổi đang chờ đồng bộ.',
+            deletedChanged,
+          );
       } else if (
         remote.revision !== local.revision &&
         readWorkspace(this.id).timer.snapshot.run
       ) {
         this.notify(
           'remote-waiting',
-          'Có bản mới trên máy chủ nhưng Timer cục bộ đang chạy. Chọn bản muốn dùng; chưa ghi đè.',
+          'Có bản mới trên máy chủ nhưng Timer cục bộ đang chạy. Giữ dấu xóa vĩnh viễn; chọn bản cho các thay đổi còn lại.',
+          this.retainRemoteDeletions(remote.payload),
         );
       } else {
         storeWorkspace(this.id, remote.payload ?? emptyWorkspace());
@@ -133,7 +156,8 @@ export class WorkspaceSync {
             }
             this.notify(
               'conflict',
-              'Hai thiết bị có thay đổi khác nhau. Chưa ghi đè bản nào.',
+              'Hai thiết bị có thay đổi khác nhau. Giữ dấu xóa vĩnh viễn; các thay đổi khác chờ lựa chọn.',
+              this.retainRemoteDeletions(latest.payload),
             );
             return;
           }
@@ -156,7 +180,11 @@ export class WorkspaceSync {
         ) {
           const current = readMeta(this.id);
           if (current.dirty) {
-            this.notify('conflict', 'Có thay đổi mới trong lúc nhận dữ liệu.');
+            this.notify(
+              'conflict',
+              'Có thay đổi mới trong lúc nhận dữ liệu.',
+              this.retainRemoteDeletions(remote.payload),
+            );
             return;
           }
           const editing =
@@ -168,7 +196,8 @@ export class WorkspaceSync {
           if (readWorkspace(this.id).timer.snapshot.run || editing) {
             this.notify(
               'remote-waiting',
-              'Thiết bị khác vừa thay đổi dữ liệu khi bạn đang làm việc. Hãy quyết định bản muốn dùng; chưa ghi đè.',
+              'Thiết bị khác vừa thay đổi dữ liệu khi bạn đang làm việc. Giữ dấu xóa vĩnh viễn; chọn bản cho các thay đổi còn lại.',
+              this.retainRemoteDeletions(remote.payload),
             );
             return;
           }
@@ -227,6 +256,19 @@ export class WorkspaceSync {
       const remote = await this.remote();
       if (this.stopped) return;
       backupAccount(this.id, remote.payload ?? emptyWorkspace());
+      const local = readWorkspace(this.id);
+      const habits = mergeHabitDeletions(
+        local.habits.habits,
+        remote.payload?.habits.habits ?? [],
+      );
+      if (JSON.stringify(habits) !== JSON.stringify(local.habits.habits)) {
+        storeWorkspace(this.id, { ...local, habits: { version: 1, habits } });
+        this.notify(
+          'pending',
+          'Giữ dấu xóa vĩnh viễn từ máy chủ khi dùng bản thiết bị.',
+          true,
+        );
+      }
       writeMeta(this.id, { revision: remote.revision, dirty: true });
       this.notify(
         'pending',

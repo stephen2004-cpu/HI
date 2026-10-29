@@ -215,3 +215,36 @@ it('restoring an archive respects a pre-existing user pause and never restarts a
     recurrenceState(restoreHabit(archiveHabit(ended, now + 1000), now + 2000)),
   ).toBe('ended');
 });
+
+it('never regenerates deleted habits and hides future automatic blocks even for protected task IDs, retaining past focus blocks', async () => {
+  const { deleteHabit } = await import('./habits');
+  const h = habit();
+  const generated = generateHabitRange(
+    [h],
+    defaultPlanner,
+    [],
+    monday,
+    new Date(2026, 10, 2),
+    new Set(),
+    now,
+  );
+  const dead = deleteHabit(h, false, generated.planner.blocks[0].end + 1);
+  const visible = visibleHabitBlocks(
+    generated.planner.blocks,
+    [dead],
+    new Set(generated.tasks.map((t) => t.id)),
+    now,
+  );
+  expect(visible).toHaveLength(1);
+  const later = generateHabitRange(
+    [dead],
+    generated.planner,
+    generated.tasks,
+    new Date(2026, 10, 2),
+    new Date(2026, 10, 9),
+    new Set(),
+    now,
+  );
+  expect(later.tasksChanged).toBe(false);
+  expect(later.blocksChanged).toBe(false);
+});

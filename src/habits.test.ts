@@ -69,3 +69,19 @@ it('keeps invalid data untouched and reports quota failures', () => {
   expect(write).not.toHaveBeenCalled();
   expect(saveHabits([h])).toBe(false);
 });
+
+it('permanently hides a habit while retaining logs by default; a purge keeps only a deletion marker', async () => {
+  const { deleteHabit, restoreHabit, habitOccurrence, mergeHabitDeletions } =
+    await import('./habits');
+  const logged: Habit = { ...h, logs: { '2026-10-26': 'done' } };
+  const dead = deleteHabit(logged, false, 1234);
+  expect(dead.logs).toEqual(logged.logs);
+  expect(dead.deletedAt).toBe(1234);
+  expect(restoreHabit(dead)).toBe(dead);
+  expect(habitOccurrence(dead, '2026-10-26')).toBeUndefined();
+  const purged = deleteHabit(logged, true, 1234);
+  expect(purged.logs).toEqual({});
+  expect(purged.deletedHistory).toBe(true);
+  expect(mergeHabitDeletions([logged], [dead])).toEqual([dead]);
+  expect(mergeHabitDeletions([], [dead])).toEqual([dead]);
+});

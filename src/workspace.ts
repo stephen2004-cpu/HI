@@ -1,7 +1,7 @@
 import { initial, parseSaved, type Saved } from './storage';
 import { validTask, type Task } from './tasks';
 import { defaultPlanner, validBlock, type Planner } from './planner';
-import { validHabit, type Habit } from './habits';
+import { validHabit, mergeHabitDeletions, type Habit } from './habits';
 import { validReview, type Review } from './performance';
 import { documentKeys, scopedKey } from './workspaceStorage';
 export type Workspace = {
@@ -128,7 +128,10 @@ export function mergeGuest(account: Workspace, guest: Workspace): Workspace {
     },
     habits: {
       version: 1,
-      habits: merge(account.habits.habits, guest.habits.habits, (h) => h.id),
+      habits: mergeHabitDeletions(
+        merge(account.habits.habits, guest.habits.habits, (h) => h.id),
+        mergeHabitDeletions(guest.habits.habits, account.habits.habits),
+      ),
     },
     reviews: merge(account.reviews, guest.reviews, (r) => r.runId),
   };

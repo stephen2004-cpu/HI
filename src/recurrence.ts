@@ -27,6 +27,7 @@ export function generateHabitRange(
     return { tasks, planner, tasksChanged, blocksChanged };
   for (let day = dayStart(from); +day < +to; day = addDays(day, 1))
     for (const h of habits) {
+      if (h.deletedAt !== undefined) continue;
       const date = localDate(day),
         occurrence = habitOccurrence(h, date);
       if (!occurrence || (h.archived && occurrence.start >= now)) continue;
@@ -119,8 +120,14 @@ export function visibleHabitBlocks(
 ) {
   return blocks.filter((b) => {
     if (b.cancelled) return false;
-    if (!b.recurringHabitId) return true;
-    const h = habits.find((h) => h.id === b.recurringHabitId);
+    // Older manual connections used the stable automatic ID but omitted metadata.
+    const h = habits.find(
+      (h) =>
+        h.id === b.recurringHabitId ||
+        (!!h.recurrence && b.id.startsWith(`habit-block:${h.id}:`)),
+    );
+    if (!b.recurringHabitId && !h) return true;
+    if (h?.deletedAt !== undefined && b.start >= h.deletedAt) return false;
     if (protectedTaskIds.has(b.taskId) || h?.logs[b.habitDate ?? ''] === 'done')
       return true;
     if (!h || !h.recurrence) return b.start < now;

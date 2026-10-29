@@ -12,6 +12,7 @@ if (!['127.0.0.1', 'localhost'].includes(new URL(cfg.url).hostname))
   );
 export default defineConfig({
   testDir: './integration',
+  outputDir: './test-results-auth',
   timeout: 120000,
   workers: 1,
   use: {

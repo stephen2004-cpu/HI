@@ -312,3 +312,14 @@ hoặc tệp sao lưu JSON cần xác nhận và giữ bản gốc.
 Cần cấu hình Supabase Preview và chạy migration trước khi dùng đồng bộ thật.
 Xem [hướng dẫn Auth, RLS, dữ liệu cũ và kiểm thử](docs/supabase-auth.md).
 Không dùng service_role trong frontend; không tự cập nhật Production.
+
+## Habit, Calendar và chuông báo V2
+
+Habit hỗ trợ xóa vĩnh viễn với xác nhận, giữ lịch sử mặc định và dấu xóa chống
+khôi phục từ thiết bị offline. Calendar đánh dấu Task hoàn thành ở mọi chế độ;
+chuông Timer lặp đến khi bấm **Tắt chuông**, theo thiết lập âm lượng/tắt tiếng.
+
+Xóa Habit trong tài khoản cần migration bổ sung
+`supabase/migrations/202610300001_habit_deletions.sql` trên cơ sở dữ liệu Preview.
+Xem [thiết kế dữ liệu, giới hạn và kiểm tra thủ công](docs/v2-habit-calendar-alarm.md).
+Không tự chạy migration hoặc triển khai lên Production.

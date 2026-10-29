@@ -3005,3 +3005,90 @@ main:has(.linked-focus) {
   font-weight: 600;
   letter-spacing: 0.12em;
 }
+
+.block-completed-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.time-block.task-completed,
+.month-block.task-completed {
+  box-shadow: inset 0 0 0 1px #0002;
+}
+.time-block.task-completed strong,
+.month-block.task-completed {
+  font-weight: 500;
+}
+.alarm-banner {
+  position: fixed;
+  z-index: 130;
+  left: 16px;
+  right: 16px;
+  bottom: 24px;
+  margin: auto;
+  max-width: 720px;
+  padding: 20px;
+  border: 1px solid var(--gold);
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: 0 12px 50px #0009;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.alarm-banner p {
+  margin: 4px 0;
+}
+.alarm-banner .button {
+  min-height: 44px;
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .alarm-banner {
+    align-items: stretch;
+    flex-direction: column;
+    bottom: 12px;
+  }
+}
+
+/* Compact completion header preserves the original priority fill and time geometry. */
+.time-block.task-completed .block-completed-label {
+  font-size: 10px;
+  line-height: 12px;
+  white-space: nowrap;
+  padding-left: 9px;
+}
+.time-block.task-completed .priority-tag {
+  position: absolute;
+  top: 7px;
+  left: 5px;
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  font-size: 0;
+}
+.time-block.task-completed strong,
+.time-block.task-completed small {
+  opacity: 0.85;
+}
+.habit-delete-dialog .import-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.habit-delete-dialog .import-consent input {
+  width: auto;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.habit-delete-dialog .button {
+  min-height: 44px;
+  font-size: 13px;
+}
+.habit-delete-dialog .danger {
+  background: var(--gold);
+  color: #151412;
+}

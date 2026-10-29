@@ -97,7 +97,15 @@ docker([
 ]);
 for (let i = 0; i < 60; i++) {
   try {
-    docker(['exec', 'lbd-auth-pg', 'pg_isready', '-U', 'postgres']);
+    docker([
+      'exec',
+      'lbd-auth-pg',
+      'pg_isready',
+      '-h',
+      '127.0.0.1',
+      '-U',
+      'postgres',
+    ]);
     break;
   } catch {
     await new Promise((r) => setTimeout(r, 500));
@@ -198,6 +206,25 @@ docker(
   readFileSync(
     new URL(
       '../supabase/migrations/202610270001_auth_workspace.sql',
+      import.meta.url,
+    ),
+    'utf8',
+  ),
+);
+docker(
+  [
+    'exec',
+    '-i',
+    'lbd-auth-pg',
+    'psql',
+    '-U',
+    'postgres',
+    '-v',
+    'ON_ERROR_STOP=1',
+  ],
+  readFileSync(
+    new URL(
+      '../supabase/migrations/202610300001_habit_deletions.sql',
       import.meta.url,
     ),
     'utf8',
