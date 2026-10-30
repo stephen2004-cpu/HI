@@ -311,3 +311,216 @@ test('history purge cannot be undone by a stale snapshot; an absent migration bl
   );
   await a.auth.signOut();
 });
+
+test('GYM capability failures are visible inside the mobile confirmation, preserve data and allow a safe retry', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const a = client(),
+    email = `gym-${randomUUID()}@example.com`,
+    pass = `Lbd-${randomUUID()}!`,
+    { w, h } = fixture();
+  h.name = 'GYM';
+  h.weeklyTarget = 3;
+  h.logs = { '2026-10-26': 'done', '2026-10-27': 'done', '2026-10-28': 'done' };
+  await a.auth.signUp({ email, password: pass });
+  expect(
+    (await a.rpc('lbd_commit_workspace', { expected_revision: 0, payload: w }))
+      .error,
+  ).toBeNull();
+  await page.goto('/?auth=login#Thói%20quen');
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  await page.getByLabel('Mật khẩu', { exact: true }).fill(pass);
+  await page
+    .getByRole('button', { name: 'Đăng nhập bằng email', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Sửa thói quen GYM', exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Sửa thói quen GYM', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Xóa vĩnh viễn thói quen?' });
+  const before = await page.evaluate(() =>
+    Object.fromEntries(
+      Object.entries(localStorage).filter(
+        ([key]) => key.includes(':lbd-focus-') || key === 'lbd-focus-v1',
+      ),
+    ),
+  );
+  const remoteBefore = (await a.rpc('lbd_read_workspace')).data;
+  for (const [status, body, message] of [
+    [404, { code: 'PGRST202', message: 'private-server-details' }, 'Thiếu RPC'],
+    [
+      403,
+      { code: '42501', message: 'private-server-details' },
+      'không có quyền',
+    ],
+    [
+      401,
+      { code: 'PGRST301', message: 'private-server-details' },
+      'đăng nhập lại',
+    ],
+    [
+      500,
+      { code: 'XX000', message: 'private-server-details' },
+      'Chưa kiểm tra được',
+    ],
+    [200, '1', 'không được hỗ trợ'],
+    [0, null, 'Kiểm tra mạng'],
+  ] as const) {
+    await page.route(
+      '**/rest/v1/rpc/lbd_habit_deletion_capabilities',
+      (route) =>
+        status === 0
+          ? route.abort()
+          : route.fulfill({
+              status,
+              contentType: 'application/json',
+              body: JSON.stringify(body),
+            }),
+    );
+    await dialog
+      .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
+      .click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('alert')).toContainText(message);
+    await expect(dialog.getByRole('alert')).toContainText('Chưa xóa thói quen');
+    await expect(dialog.getByRole('alert')).not.toContainText(
+      'private-server-details',
+    );
+    expect(
+      await dialog.getByRole('alert').evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return r.top >= 0 && r.bottom <= innerHeight;
+      }),
+    ).toBe(true);
+    expect(
+      await page.evaluate(() =>
+        Object.fromEntries(
+          Object.entries(localStorage).filter(
+            ([key]) => key.includes(':lbd-focus-') || key === 'lbd-focus-v1',
+          ),
+        ),
+      ),
+    ).toEqual(before);
+    await page.unroute('**/rest/v1/rpc/lbd_habit_deletion_capabilities');
+  }
+  expect((await a.rpc('lbd_read_workspace')).data).toEqual(remoteBefore);
+  await page.screenshot({ path: '/tmp/lbd-habit-delete-error-mobile.png' });
+  // Same modal can retry once the actual server capability is reachable.
+  await dialog
+    .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('.habit-table tbody tr')).toHaveCount(0);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Đã lưu dấu xóa' }),
+  ).toBeVisible();
+  await expect(page.locator('.sync-status')).toContainText('Đã đồng bộ', {
+    timeout: 15000,
+  });
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: 'Thói quen của tôi' }),
+  ).toBeVisible();
+  await expect(page.locator('.habit-table tbody tr')).toHaveCount(0);
+  const after = (await a.rpc('lbd_read_workspace')).data.payload;
+  expect(after.habits.habits[0].deletedAt).toBeGreaterThan(0);
+  expect(after.habits.habits[0].logs).toEqual(h.logs);
+  expect(after.timer.snapshot.history).toEqual(w.timer.snapshot.history);
+  expect(
+    after.tasks.tasks.some((t: { id: string }) => t.id === 'independent'),
+  ).toBe(true);
+  await a.auth.signOut();
+});
+
+test('hung capability checks time out safely and retry preserves Habit changes made while the RPC is pending', async ({
+  page,
+}) => {
+  const a = client(),
+    email = `latency-${randomUUID()}@example.com`,
+    pass = `Lbd-${randomUUID()}!`,
+    { w, h } = fixture();
+  await a.auth.signUp({ email, password: pass });
+  await a.rpc('lbd_commit_workspace', { expected_revision: 0, payload: w });
+  await login(page, email, pass);
+  await page
+    .getByRole('button', { name: 'Sửa thói quen Xóa an toàn', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Xóa vĩnh viễn thói quen?' });
+  const before = (await a.rpc('lbd_read_workspace')).data;
+  await page.route('**/rest/v1/rpc/lbd_habit_deletion_capabilities', () => {
+    /* Intentionally leave the request pending. */
+  });
+  await dialog
+    .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
+    .click();
+  await expect(dialog.getByRole('status')).toContainText('Đang kiểm tra');
+  await expect(dialog.getByRole('alert')).toContainText('phản hồi quá lâu', {
+    timeout: 16000,
+  });
+  expect((await a.rpc('lbd_read_workspace')).data).toEqual(before);
+  await page.unroute('**/rest/v1/rpc/lbd_habit_deletion_capabilities');
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(
+    '**/rest/v1/rpc/lbd_habit_deletion_capabilities',
+    async (route) => {
+      await gate;
+      await route.continue();
+    },
+  );
+  const request = page.waitForRequest(
+    '**/rest/v1/rpc/lbd_habit_deletion_capabilities',
+  );
+  await dialog
+    .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
+    .click();
+  await request;
+  await page.evaluate(async () => {
+    const { loadHabits, saveHabits } = await import('/src/habits.ts');
+    const habits = loadHabits().habits;
+    habits[0].logs['2026-10-29'] = 'done';
+    saveHabits([
+      ...habits,
+      {
+        ...habits[0],
+        id: 'concurrent-habit',
+        name: 'Giữ Habit mới',
+        recurrence: undefined,
+        logs: {},
+      },
+    ]);
+  });
+  release();
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.getByRole('button', {
+      name: 'Sửa thói quen Giữ Habit mới',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator('.sync-status')).toContainText('Đã đồng bộ', {
+    timeout: 15000,
+  });
+  const after = (await a.rpc('lbd_read_workspace')).data.payload;
+  const deleted = after.habits.habits.find((x: Habit) => x.id === h.id);
+  expect(deleted.deletedAt).toBeGreaterThan(0);
+  expect(deleted.logs).toEqual({ ...h.logs, '2026-10-29': 'done' });
+  expect(
+    after.habits.habits.some(
+      (x: Habit) => x.id === 'concurrent-habit' && x.deletedAt === undefined,
+    ),
+  ).toBe(true);
+  expect(after.timer.snapshot.history).toEqual(w.timer.snapshot.history);
+  await a.auth.signOut();
+});

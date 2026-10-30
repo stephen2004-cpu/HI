@@ -1229,3 +1229,13 @@ footer {
     transition: none;
   }
 }
+
+.habit-deletion-error {
+  padding: 14px 16px;
+  border: 1px solid #b88b48;
+  border-radius: 12px;
+  background: #30261a;
+  color: #ffe3ae;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}

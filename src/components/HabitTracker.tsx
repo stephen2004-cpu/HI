@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { habitDeletionIssue } from '../habitDeletion';
 import { supabase } from '../supabase';
 import { workspaceUser } from '../workspaceStorage';
 import {
@@ -27,6 +28,7 @@ import {
   archiveHabit,
   restoreHabit,
   deleteHabit,
+  mergeHabitDeletions,
 } from '../habits';
 const blank: Omit<Habit, 'id' | 'logs'> = {
   name: '',
@@ -57,10 +59,31 @@ export default function HabitTracker({
     [deleting, setDeleting] = useState<string | null>(null),
     [eraseHistory, setEraseHistory] = useState(false),
     [deletingBusy, setDeletingBusy] = useState(false),
+    [deletionError, setDeletionError] = useState(''),
+    [notice, setNotice] = useState(''),
     [occurrence, setOccurrence] = useState(localDate(new Date())),
     [automatic, setAutomatic] = useState(true),
     [scheduleTime, setScheduleTime] = useState('09:00'),
     [scheduleStart, setScheduleStart] = useState(localDate(new Date()));
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    const refresh = () => {
+      const latest = loadHabits();
+      if (latest.error) {
+        setError(
+          'Không đọc được dữ liệu thói quen mới nhất. Dữ liệu gốc vẫn được giữ.',
+        );
+        return;
+      }
+      setHabits(latest.habits);
+    };
+    window.addEventListener('lbd-habits-updated', refresh);
+    return () => {
+      mounted.current = false;
+      window.removeEventListener('lbd-habits-updated', refresh);
+    };
+  }, []);
   const start = weekStart(date, 1),
     days =
       view === 'week'
@@ -76,14 +99,20 @@ export default function HabitTracker({
             (_, i) => new Date(date.getFullYear(), date.getMonth(), i + 1),
           );
   const commit = (next: Habit[]) => {
-    if (loaded.error) return false;
-    if (!saveHabits(next)) {
+    const latest = loadHabits();
+    if (loaded.error || latest.error) {
+      setError('Không đọc được dữ liệu thói quen mới nhất. Chưa lưu thay đổi.');
+      return false;
+    }
+    // A stale form or event must never overwrite a tombstone already on this device.
+    const protectedNext = mergeHabitDeletions(next, latest.habits);
+    if (!saveHabits(protectedNext)) {
       setError(
         'Không lưu được thói quen. Kiểm tra quyền hoặc dung lượng lưu trữ, rồi thử lại.',
       );
       return false;
     }
-    setHabits(next);
+    setHabits(protectedNext);
     setError('');
     return true;
   };
@@ -101,6 +130,7 @@ export default function HabitTracker({
         <span className="habit-badge">HABITS</span>
       </div>
       {error && <p role="alert">{error}</p>}
+      {notice && <p role="status">{notice}</p>}
       <form
         className="habit-form workspace-card"
         onSubmit={(e) => {
@@ -264,6 +294,8 @@ export default function HabitTracker({
             onClick={() => {
               setDeleting(editing);
               setEraseHistory(false);
+              setDeletionError('');
+              setNotice('');
             }}
           >
             Xóa vĩnh viễn
@@ -276,6 +308,7 @@ export default function HabitTracker({
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-habit-title"
+            aria-busy={deletingBusy}
             className="block-editor habit-delete-dialog"
             onKeyDown={(e) => {
               if (e.key === 'Escape' && !deletingBusy) setDeleting(null);
@@ -305,6 +338,16 @@ export default function HabitTracker({
               Mặc định giữ lịch sử đánh dấu trong bản ghi đã xóa để có thể xuất
               sao lưu, không hiển thị trong danh sách thói quen.
             </p>
+            {deletionError && (
+              <p role="alert" className="habit-deletion-error">
+                {deletionError}
+              </p>
+            )}
+            {deletingBusy && (
+              <p role="status">
+                Đang kiểm tra bảo vệ dấu xóa… Chưa xóa thói quen.
+              </p>
+            )}
             <label className="import-consent">
               <input
                 type="checkbox"
@@ -334,40 +377,71 @@ export default function HabitTracker({
                 )
                   return;
                 const scope = workspaceUser();
-                if (scope) {
-                  setDeletingBusy(true);
-                  try {
-                    const result = await supabase?.rpc(
-                      'lbd_habit_deletion_capabilities',
-                    );
-                    if (workspaceUser() !== scope) return;
-                    if (!result || result.error || result.data !== 1) {
-                      setError(
-                        'Chưa thể xóa vĩnh viễn: cần kết nối và migration bảo vệ dấu xóa trên Supabase. Chưa thay đổi thói quen.',
+                setDeletionError('');
+                setDeletingBusy(true);
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 12000);
+                try {
+                  if (scope) {
+                    if (!supabase) {
+                      setDeletionError(
+                        'Chưa cấu hình kết nối Supabase. Chưa xóa thói quen; dữ liệu vẫn được giữ.',
                       );
-                      setDeleting(null);
                       return;
                     }
-                  } catch {
-                    setError(
-                      'Chưa kết nối được máy chủ để bảo vệ dấu xóa. Chưa thay đổi thói quen.',
-                    );
-                    setDeleting(null);
-                    return;
-                  } finally {
-                    setDeletingBusy(false);
+                    const result = await supabase
+                      .rpc('lbd_habit_deletion_capabilities')
+                      .abortSignal(controller.signal);
+                    if (!mounted.current || workspaceUser() !== scope) return;
+                    const issue = controller.signal.aborted
+                      ? 'Máy chủ phản hồi quá lâu. Chưa xóa thói quen; hãy kiểm tra mạng rồi thử lại.'
+                      : habitDeletionIssue(result);
+                    if (issue) {
+                      setDeletionError(issue);
+                      return;
+                    }
                   }
-                }
-                if (
-                  commit(
-                    habits.map((h) =>
-                      h.id === deleting ? deleteHabit(h, eraseHistory) : h,
-                    ),
-                  )
-                ) {
+                  if (!mounted.current || workspaceUser() !== scope) return;
+                  // Re-read after awaiting RPC: another operation may have updated the workspace.
+                  const latest = loadHabits();
+                  if (
+                    latest.error ||
+                    !latest.habits.some((h) => h.id === deleting)
+                  ) {
+                    setDeletionError(
+                      'Không đọc được thói quen cần xóa trong dữ liệu mới nhất. Chưa thay đổi dữ liệu; hãy đóng bảng và kiểm tra lại.',
+                    );
+                    return;
+                  }
+                  if (
+                    !commit(
+                      latest.habits.map((h) =>
+                        h.id === deleting ? deleteHabit(h, eraseHistory) : h,
+                      ),
+                    )
+                  ) {
+                    setDeletionError(
+                      'Không lưu được dấu xóa trên thiết bị. Chưa xóa thói quen; kiểm tra quyền hoặc dung lượng lưu trữ rồi thử lại.',
+                    );
+                    return;
+                  }
                   setDeleting(null);
                   setEditing(null);
                   setDraft(blank);
+                  setNotice(
+                    scope
+                      ? 'Đã lưu dấu xóa và ẩn thói quen trên thiết bị này. Hãy chờ trạng thái Đã đồng bộ trước khi kiểm tra trên thiết bị khác. Nếu đồng bộ lỗi, dấu xóa vẫn chờ gửi trên thiết bị này.'
+                      : 'Đã xóa thói quen trên thiết bị này. Dữ liệu khách chưa được đồng bộ lên tài khoản.',
+                  );
+                } catch {
+                  if (mounted.current && workspaceUser() === scope)
+                    setDeletionError(
+                      'Chưa kết nối được máy chủ để bảo vệ dấu xóa. Chưa xóa thói quen; dữ liệu vẫn được giữ. Hãy thử lại khi có mạng.',
+                    );
+                } finally {
+                  clearTimeout(timeout);
+                  if (mounted.current && workspaceUser() === scope)
+                    setDeletingBusy(false);
                 }
               }}
             >
