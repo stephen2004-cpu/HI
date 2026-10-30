@@ -84,6 +84,9 @@ export default function App() {
     return () => window.removeEventListener('lbd-habits-updated', refresh);
   }, []);
   const [calendarDate, setCalendarDate] = useState('');
+  const [calendarTaskRequest, setCalendarTaskRequest] = useState<
+    { taskId: string; date: string; token: number } | undefined
+  >();
   const [taskState, setTaskState] = useState(readTasks);
   const [plannerState] = useState(loadPlanner);
   const [planner, setPlanner] = useState(plannerState.data);
@@ -678,6 +681,8 @@ export default function App() {
             tasks={taskState.tasks}
             planner={displayPlanner}
             initialDate={calendarDate}
+            scheduleRequest={calendarTaskRequest}
+            onScheduleOpened={() => setCalendarTaskRequest(undefined)}
             update={updateCalendar}
             onRange={ensureHabitRange}
             recurrenceToken={JSON.stringify(habitState.habits)}
@@ -685,7 +690,20 @@ export default function App() {
             locked={plannerState.error || taskState.error}
           />
         )}
-        {screen === 'Task' && <TaskBoard />}
+        {screen === 'Task' && (
+          <TaskBoard
+            planner={planner}
+            visibleBlocks={displayBlocks}
+            habits={habitState.habits}
+            onRange={ensureHabitRange}
+            plannerError={plannerState.error || habitState.error}
+            scheduleTask={(taskId, date) => {
+              setCalendarDate(date);
+              setCalendarTaskRequest({ taskId, date, token: Date.now() });
+              navigate('Lịch');
+            }}
+          />
+        )}
         {screen === 'Thói quen' && <HabitTracker connect={connectHabit} />}
         {(screen === 'Tổng quan' || screen === 'Thống kê') && (
           <Insights

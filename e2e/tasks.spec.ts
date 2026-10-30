@@ -15,10 +15,11 @@ test('task CRUD, colors, priority, completion and reload', async ({ page }) => {
   await page.reload();
   await expect(
     page
-      .getByRole('region', { name: 'Lên lịch', exact: true })
+      .getByRole('region', { name: 'Task chưa lên lịch', exact: true })
       .locator('.task-card'),
   ).toHaveCount(1);
   await expect(card.getByRole('checkbox')).toBeChecked();
+  await expect(card.getByRole('combobox')).toHaveValue('schedule');
   await expect(card).toHaveCSS('border-left-color', 'rgb(170, 51, 119)');
   const transfer = await page.evaluateHandle(() => new DataTransfer());
   await card.dispatchEvent('dragstart', { dataTransfer: transfer });

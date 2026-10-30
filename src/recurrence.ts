@@ -37,6 +37,9 @@ export function generateHabitRange(
         existing = index < 0 ? undefined : blocks[index];
       if (existing?.cancelled) continue;
       const existingTask = nextTasks.find((t) => t.id === taskId);
+      // A retained Calendar block whose source Task was explicitly deleted is
+      // historical evidence, not permission to recreate that Task on filtering.
+      if (existing && !existingTask) continue;
       const protectedInstance =
         protectedTaskIds.has(taskId) ||
         existingTask?.completed ||

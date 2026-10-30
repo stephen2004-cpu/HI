@@ -13,6 +13,8 @@ import {
 type Props = {
   tasks: Task[];
   initialDate?: string;
+  scheduleRequest?: { taskId: string; date: string; token: number };
+  onScheduleOpened?: () => void;
   onRange?: (from: Date, to: Date) => void;
   recurrenceToken?: string;
   planner: Planner;
@@ -25,6 +27,8 @@ const shortDate = (d: Date) =>
 export default function Calendar({
   tasks,
   initialDate,
+  scheduleRequest,
+  onScheduleOpened,
   onRange,
   recurrenceToken,
   planner,
@@ -110,6 +114,15 @@ export default function Calendar({
       color: '',
     });
   };
+  useEffect(() => {
+    if (!scheduleRequest) return;
+    if (tasks.some((t) => t.id === scheduleRequest.taskId))
+      newBlock(
+        scheduleRequest.taskId,
+        +new Date(`${scheduleRequest.date}T09:00:00`),
+      );
+    onScheduleOpened?.();
+  }, [scheduleRequest?.token]);
   const persist = (blocks: TimeBlock[]) => {
     const ok = update({ ...planner, blocks });
     if (!ok) setError('Không lưu được lịch. Dữ liệu nhập vẫn được giữ lại.');

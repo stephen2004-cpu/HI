@@ -323,3 +323,10 @@ Xóa Habit trong tài khoản cần migration bổ sung
 `supabase/migrations/202610300001_habit_deletions.sql` trên cơ sở dữ liệu Preview.
 Xem [thiết kế dữ liệu, giới hạn và kiểm tra thủ công](docs/v2-habit-calendar-alarm.md).
 Không tự chạy migration hoặc triển khai lên Production.
+
+## Eisenhower theo ngày / tuần / tháng
+
+Trang Task mặc định xem hôm nay, gộp nhiều Time Block thành một thẻ, tách riêng
+Task chưa lên lịch và quá hạn. Có bộ lọc trạng thái, số lượng theo nhóm, thu gọn
+nhóm và mở Calendar để chủ động lên lịch. Không có migration hay khóa lưu trữ mới.
+Xem [quy tắc ngày, Habit, dữ liệu và trạng thái logo Chim Ưng](docs/task-periods.md).

@@ -248,3 +248,29 @@ it('never regenerates deleted habits and hides future automatic blocks even for 
   expect(later.tasksChanged).toBe(false);
   expect(later.blocksChanged).toBe(false);
 });
+
+it('does not resurrect an explicitly deleted source task when its calendar evidence remains', () => {
+  const h = habit(),
+    first = generateHabitRange(
+      [h],
+      defaultPlanner,
+      [],
+      monday,
+      new Date(2026, 10, 2),
+      new Set(),
+      now,
+    );
+  const removedId = first.tasks[0].id;
+  const again = generateHabitRange(
+    [h],
+    first.planner,
+    first.tasks.filter((t) => t.id !== removedId),
+    monday,
+    new Date(2026, 10, 2),
+    new Set(),
+    now,
+  );
+  expect(again.tasks.some((t) => t.id === removedId)).toBe(false);
+  expect(again.tasksChanged).toBe(false);
+  expect(again.planner.blocks).toEqual(first.planner.blocks);
+});
