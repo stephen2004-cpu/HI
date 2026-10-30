@@ -1,0 +1,853 @@
+/* LBD tactile interface. Layout/data contracts remain in styles.css and the components. */
+:root {
+  --ui-face: #1d1c1a;
+  --ui-edge: #39352e;
+  --ui-shadow: #090908;
+  --ui-gold-edge: #88652f;
+  --ui-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ui-fast: 120ms;
+  --ui-normal: 180ms;
+  --muted: #aba59b;
+  --line: #302e2a;
+}
+body {
+  background:
+    radial-gradient(ellipse at 50% 0, #d5ac6408, transparent 550px), var(--bg);
+}
+button,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: #d5ac6422;
+}
+button {
+  touch-action: manipulation;
+}
+button:disabled {
+  opacity: 0.48;
+}
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 4px;
+}
+:where(.button, .app-nav button, .mode-tabs button, .presets button) {
+  --ui-button-shadow: var(--ui-shadow);
+  border: 2px solid var(--ui-edge);
+  border-radius: 13px;
+  background: var(--ui-face);
+  color: var(--cream);
+  box-shadow:
+    0 4px 0 var(--ui-button-shadow),
+    inset 0 1px 0 #ffffff06;
+  transition:
+    transform var(--ui-fast) var(--ui-ease),
+    box-shadow var(--ui-fast) var(--ui-ease),
+    background var(--ui-normal),
+    border-color var(--ui-normal),
+    color var(--ui-normal);
+}
+/* Explicit selectors win over legacy screen-specific declarations. */
+.button,
+.account-panel .button,
+.focus-details .checklist > .button {
+  min-height: 44px;
+  padding: 12px 18px;
+  border: 2px solid var(--ui-edge);
+  border-radius: 13px;
+  background: var(--ui-face);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow:
+    0 4px 0 var(--ui-shadow),
+    inset 0 1px 0 #ffffff06;
+}
+.button.primary,
+.account-panel .primary,
+.linked-focus .timer-controls > .primary,
+.habit-delete-dialog .danger {
+  --ui-button-shadow: var(--ui-gold-edge);
+  background: linear-gradient(180deg, #e8c482, var(--gold));
+  color: #211809;
+  border-color: #e5bd75;
+  box-shadow:
+    0 4px 0 var(--ui-gold-edge),
+    inset 0 1px 0 #fff6;
+}
+.button.outline {
+  background: #171715;
+}
+.button.danger:not(.primary) {
+  border-color: #826748;
+}
+.button:disabled,
+.app-nav button:disabled,
+.mode-tabs button:disabled,
+.presets button:disabled {
+  box-shadow: none;
+  transform: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .button:hover:not(:disabled),
+  .account-panel .button:hover:not(:disabled),
+  .app-nav button:hover:not(:disabled),
+  .mode-tabs button:hover:not(:disabled),
+  .presets button:hover:not(:disabled) {
+    transform: translateY(-2px);
+    border-color: #6c5b3f;
+    box-shadow:
+      0 6px 0 var(--ui-button-shadow, var(--ui-shadow)),
+      inset 0 1px 0 #ffffff0a;
+  }
+  .button.primary:hover:not(:disabled) {
+    border-color: #f2d79d;
+    background: linear-gradient(180deg, #f0cf93, #ddb773);
+  }
+}
+.button:active:not(:disabled),
+.account-panel .button:active:not(:disabled),
+.app-nav button:active:not(:disabled),
+.mode-tabs button:active:not(:disabled),
+.presets button:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--ui-button-shadow, var(--ui-shadow));
+  transition-duration: 50ms;
+}
+.icon-button,
+.checklist-row button,
+.habit-edit,
+.history-actions button,
+.task-actions button {
+  transition:
+    background var(--ui-fast),
+    border-color var(--ui-fast),
+    box-shadow var(--ui-fast),
+    color var(--ui-fast);
+}
+.icon-button:hover:not(:disabled),
+.habit-edit:hover:not(:disabled) {
+  color: var(--gold);
+  background: #d5ac6412;
+}
+.icon-button:active:not(:disabled),
+.checklist-row button:active:not(:disabled) {
+  box-shadow: inset 0 2px 3px #0005;
+}
+.header {
+  border-bottom-color: var(--line);
+}
+.wordmark {
+  color: var(--cream);
+}
+/* Logo assets, markup and their aspect ratio are deliberately untouched. */
+.account-bar {
+  color: var(--muted);
+  padding-block: 14px;
+}
+.account-bar .button {
+  min-height: 36px;
+  padding: 7px 13px;
+  font-size: 11px;
+}
+.app-nav {
+  gap: 9px;
+  padding: 16px 0 22px;
+  margin-bottom: 28px;
+  border-bottom-color: var(--line);
+}
+.app-nav button {
+  min-height: 48px;
+  padding: 12px 10px;
+  border: 2px solid var(--ui-edge);
+  border-radius: 13px;
+  background: #191917;
+  color: #c9c1b4;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 0 var(--ui-shadow);
+}
+.app-nav button[aria-current='page'] {
+  --ui-button-shadow: var(--ui-gold-edge);
+  color: #211809;
+  background: linear-gradient(180deg, #e9c788, var(--gold));
+  border-color: #e5bd75;
+  box-shadow:
+    0 4px 0 var(--ui-gold-edge),
+    inset 0 1px 0 #fff5;
+}
+main {
+  line-height: 1.65;
+}
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+h1 {
+  letter-spacing: -0.045em;
+}
+.eyebrow {
+  color: #c3a46f;
+  font-weight: 600;
+  line-height: 1.8;
+}
+:where(
+  .calendar-toolbar,
+  .habit-heading,
+  .workspace-heading,
+  .section-heading
+) {
+  margin-bottom: 22px;
+}
+:where(.calendar-toolbar, .habit-heading) h1 {
+  margin-block: 6px 10px;
+}
+:where(.calendar-toolbar, .habit-heading) p {
+  color: var(--muted);
+  line-height: 1.75;
+}
+.task-form,
+.task-setup,
+.workspace-card,
+.focus-details,
+.habit-table-scroll,
+.calendar-sidebar,
+.planner-settings,
+.account-panel,
+.history,
+.metric-grid article,
+.dashboard-hero,
+.habit-connections {
+  border-color: var(--ui-edge);
+  border-radius: 20px;
+  background-color: #151513;
+  box-shadow:
+    0 5px 0 #080807,
+    inset 0 1px 0 #ffffff04;
+}
+.task-form {
+  padding: 22px;
+  background: linear-gradient(145deg, #1b1a17, #131312);
+  border: 2px solid var(--ui-edge);
+  gap: 18px;
+}
+.task-form > label {
+  flex: 1 1 160px;
+}
+.task-form > label:first-child {
+  flex-basis: 280px;
+}
+.task-form > label:has(textarea) {
+  flex-basis: 100%;
+}
+.task-form .task-setup {
+  background: #101110;
+  padding: 20px;
+  box-shadow: none;
+}
+.task-board > h1,
+.insights > h1,
+.planner-settings > h1 {
+  font-size: clamp(28px, 4vw, 38px);
+  margin-top: 0;
+}
+.task-board,
+.habit-tracker,
+.insights,
+.planner-settings {
+  margin-top: 10px;
+}
+input:not([type='checkbox']):not([type='range']):not([type='color']),
+select,
+textarea,
+.task-form input:not([type='color']),
+.task-form textarea,
+.task-board select {
+  border-color: #3a3731;
+  border-radius: 11px;
+  background-color: #10110f;
+  transition:
+    border-color var(--ui-fast),
+    box-shadow var(--ui-fast),
+    background var(--ui-fast);
+}
+input:not([type='checkbox']):focus,
+textarea:focus,
+select:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px #d5ac6414;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #89847c;
+}
+textarea {
+  font: inherit;
+  line-height: 1.75;
+}
+label,
+.task-setup label {
+  line-height: 1.6;
+}
+input[type='checkbox'] {
+  accent-color: var(--gold);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+input[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+.eisenhower-grid {
+  gap: 22px;
+}
+.quadrant {
+  padding: 20px;
+  border-radius: 20px;
+  background: #111210;
+}
+.quadrant h2 {
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  margin-top: 0;
+}
+.quadrant > p {
+  font-size: 12px;
+  line-height: 1.75;
+}
+.quadrant details {
+  color: #b2ab9e;
+  font-size: 12px;
+}
+.task-card {
+  border-radius: 15px;
+  padding: 18px;
+  background: #1b1c18;
+  border-color: var(--ui-edge);
+  box-shadow: 0 3px 0 #060706;
+}
+.task-card > label:first-child {
+  font-weight: 600;
+  line-height: 1.6;
+}
+.task-card .task-notes {
+  font-size: 13px;
+  color: #b3ad9f;
+  line-height: 1.75;
+}
+.task-card.task-done {
+  background: #181b16;
+}
+.task-done > label:first-child span {
+  opacity: 0.75;
+}
+.task-actions {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+/* Calendar: no transforms, padding or timeline geometry changes on hour slots or blocks. */
+.calendar-sidebar {
+  padding: 20px;
+  background: linear-gradient(165deg, #1c1c17, #11120f);
+}
+.calendar-priorities {
+  border-color: var(--ui-edge);
+  font-size: 11px;
+}
+.calendar-priorities i {
+  box-shadow: 0 0 0 3px #ffffff09;
+}
+.mini-days button {
+  transition:
+    background var(--ui-fast),
+    color var(--ui-fast);
+}
+.mini-days .chosen {
+  box-shadow: 0 2px 0 var(--ui-gold-edge);
+  font-weight: 600;
+}
+.calendar-controls {
+  gap: 10px;
+  align-items: end;
+}
+.calendar-controls label {
+  color: var(--muted);
+  font-size: 11px;
+}
+.calendar-controls .button {
+  padding-inline: 14px;
+}
+.calendar-scroll {
+  border-color: var(--ui-edge);
+  border-radius: 17px;
+  box-shadow: 0 4px 0 #070807;
+}
+.day-heading {
+  background: #1c1d18;
+  color: #b6b0a1;
+}
+.day-heading strong {
+  color: var(--cream);
+}
+.day-heading.today {
+  color: var(--gold);
+  box-shadow: inset 0 -2px 0 var(--gold);
+}
+.day-column {
+  background: #11130f;
+}
+.hour-slot {
+  border-bottom-color: #292d24;
+}
+.time-block,
+.month-block {
+  transition:
+    box-shadow var(--ui-fast),
+    opacity var(--ui-fast),
+    outline-color var(--ui-fast);
+}
+.time-block:hover,
+.time-block:focus-visible {
+  box-shadow:
+    0 0 0 2px #fff6,
+    0 5px 12px #0006;
+}
+.time-block:active {
+  cursor: grabbing;
+}
+.unscheduled-task {
+  border-radius: 12px;
+  border-color: var(--ui-edge);
+  background: #20211b;
+  box-shadow: 0 3px 0 #080907;
+  transition:
+    border-color var(--ui-fast),
+    box-shadow var(--ui-fast);
+}
+.unscheduled-task:hover {
+  border-color: var(--gold);
+}
+[data-ui-drag-source] {
+  opacity: 0.48;
+}
+.quadrant[data-ui-drop-target],
+.day-column[data-ui-drop-target] {
+  outline: 2px dashed var(--gold);
+  outline-offset: -3px;
+  background-color: #d5ac6410;
+}
+.day-column[data-ui-drop-target]::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: var(--ui-drop-y, 0);
+  height: 2px;
+  border-radius: 2px;
+  background: #f2cf8c;
+  box-shadow: 0 0 8px #d5ac6440;
+  z-index: 4;
+}
+.mode-tabs {
+  background: #121310;
+  border: 2px solid var(--ui-edge);
+  border-radius: 16px;
+  padding: 5px;
+}
+.mode-tabs button,
+.linked-focus .mode-tabs button {
+  min-height: 42px;
+  border-radius: 11px;
+  border: 1px solid transparent;
+  box-shadow: none;
+  font-size: 12px;
+}
+.mode-tabs button.selected,
+.linked-focus .mode-tabs button.selected {
+  --ui-button-shadow: #080908;
+  background: #302a1d;
+  border-color: #75603a;
+  color: #ebcc8e;
+  box-shadow:
+    0 3px 0 #080908,
+    inset 0 1px 0 #ffffff09;
+}
+.timer-card,
+.linked-focus .timer-card {
+  border: 2px solid #484033;
+  border-radius: 25px;
+  box-shadow:
+    0 7px 0 #060706,
+    inset 0 1px 0 #fff1;
+}
+.timer-card .clock {
+  font-variant-numeric: tabular-nums;
+}
+.timer-controls > .primary {
+  font-size: 14px;
+  min-height: 50px;
+  border-radius: 15px;
+}
+.linked-focus .timer-center {
+  padding-top: 84px;
+}
+.focus-details {
+  padding: 24px;
+  background: #11120f;
+}
+.focus-details .workspace-card {
+  border-color: var(--ui-edge);
+  background-color: #191b16;
+}
+.workspace-heading h2 {
+  font-size: clamp(23px, 2.5vw, 30px);
+  line-height: 1.4;
+  letter-spacing: -0.03em;
+}
+.workspace-heading p {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.workspace-icon {
+  border-radius: 11px;
+  box-shadow: 0 3px 0 #090908;
+}
+.focus-details .checklist-row {
+  border-radius: 12px;
+  transition: background-color var(--ui-normal);
+}
+.checklist-row:has(input[type='checkbox']:checked) {
+  background-color: #d5ac640b;
+}
+.checklist-row:has(input[type='checkbox']:checked)
+  input:not([type='checkbox']) {
+  color: #b7b49f;
+}
+.focus-details .checklist-row button {
+  border-radius: 9px;
+  box-shadow: 0 2px 0 #090a08;
+}
+.progress-track > div,
+.progress-track > span {
+  transition: width 180ms linear;
+}
+progress::-webkit-progress-value {
+  transition: width 200ms var(--ui-ease);
+}
+progress::-moz-progress-bar {
+  transition: width 200ms var(--ui-ease);
+}
+.progress-track {
+  border-radius: 10px;
+}
+.habit-form {
+  gap: 18px;
+  padding: 22px;
+}
+.habit-badge {
+  border-radius: 10px;
+  border: 1px solid #6a5734;
+  color: #e1bd78;
+  padding: 9px 14px;
+  font-weight: 600;
+  background: #2e2719;
+  box-shadow: 0 3px 0 #0c0b08;
+}
+.habit-table-scroll {
+  border-width: 2px;
+  padding: 12px;
+}
+.habit-table {
+  border-spacing: 7px;
+}
+.habit-table th {
+  color: #c2bcae;
+  font-weight: 500;
+}
+.habit-table th small {
+  color: #918b7d;
+}
+.habit-cell {
+  min-height: 46px;
+  border: 2px solid #3d3e32;
+  border-radius: 12px;
+  background: #25271f;
+  color: #b5b7a6;
+  box-shadow: 0 3px 0 #0b0d08;
+  transition:
+    background-color var(--ui-normal),
+    border-color var(--ui-normal),
+    color var(--ui-normal),
+    box-shadow var(--ui-fast);
+}
+.habit-cell.done {
+  background: #cfb16b;
+  border-color: #e6c77f;
+  color: #241e0e;
+  box-shadow: 0 3px 0 #826a32;
+}
+.habit-cell.rest {
+  color: #c2b5db;
+  background: #282330;
+  border-color: #4b415b;
+}
+.habit-cell:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #090b07;
+}
+.habit-connect-row {
+  gap: 12px;
+  padding: 16px 0;
+  border-color: var(--ui-edge);
+}
+.habit-connections h2 {
+  letter-spacing: -0.025em;
+}
+.habit-legend {
+  gap: 20px;
+  color: #b8b1a2;
+}
+.metric-grid {
+  gap: 18px;
+}
+.metric-grid article {
+  padding: 22px;
+  border: 2px solid var(--ui-edge);
+}
+.metric-grid article > span {
+  font-size: 12px;
+  line-height: 1.7;
+}
+.metric-grid strong {
+  font-variant-numeric: tabular-nums;
+  color: #e9c786;
+  letter-spacing: -0.035em;
+}
+.dashboard-hero {
+  padding: 26px;
+  border: 2px solid #665333;
+  background: linear-gradient(130deg, #2c281b, #151610);
+}
+.dashboard-hero h2 {
+  letter-spacing: -0.035em;
+}
+.dashboard-hero > span {
+  color: #d7b677;
+  font-size: 12px;
+  font-weight: 600;
+}
+.report-filters {
+  gap: 16px;
+  padding-block: 12px;
+}
+.report-filters label {
+  color: var(--muted);
+}
+.history {
+  padding: 22px;
+  border: 1px solid var(--ui-edge);
+}
+.history h2 {
+  letter-spacing: -0.025em;
+}
+.table-wrap {
+  border-radius: 13px;
+  border-color: var(--ui-edge);
+}
+.table-wrap th {
+  color: #c3bba9;
+  background: #1d1f18;
+}
+.table-wrap td {
+  line-height: 1.7;
+}
+.planner-settings {
+  padding: clamp(22px, 4vw, 38px);
+  border: 2px solid var(--ui-edge);
+}
+.planner-settings h2 {
+  font-size: 18px;
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--ui-edge);
+}
+.planner-settings label {
+  margin: 16px 0;
+}
+.planner-settings p {
+  max-width: 70ch;
+  font-size: 13px;
+  line-height: 1.85;
+}
+.account-panel {
+  border-width: 2px;
+  padding: 28px;
+}
+.account-panel h2,
+.account-panel h1 {
+  letter-spacing: -0.035em;
+}
+.account-panel p {
+  line-height: 1.8;
+  color: #bfb8a9;
+}
+.account-panel form {
+  gap: 14px;
+}
+.account-panel input:not([type='checkbox']) {
+  min-height: 46px;
+}
+.modal,
+.block-editor {
+  border: 2px solid #554833;
+  border-radius: 22px;
+  background: #181914;
+  box-shadow:
+    0 8px 0 #060705,
+    0 25px 70px #0008;
+}
+.alarm-banner {
+  border-width: 2px;
+  border-radius: 20px;
+  background: #242116;
+  box-shadow:
+    0 5px 0 #090806,
+    0 12px 40px #0008;
+}
+.schedule-warning {
+  border-radius: 12px;
+  line-height: 1.8;
+}
+.toast {
+  border: 1px solid #6a5733;
+  background: #292419;
+  border-radius: 14px;
+  line-height: 1.65;
+  box-shadow:
+    0 4px 0 #0b0905,
+    0 10px 30px #0007;
+}
+footer {
+  color: #aca594;
+}
+@media (max-width: 800px) {
+  .app-nav {
+    gap: 10px;
+    padding-bottom: 20px;
+  }
+  .app-nav button {
+    min-height: 46px;
+    padding: 10px 7px;
+    font-size: 12px;
+  }
+  .calendar-screen {
+    gap: 22px;
+  }
+  .calendar-sidebar {
+    padding: 18px;
+  }
+  .calendar-controls {
+    row-gap: 14px;
+  }
+  .calendar-controls .button {
+    padding-inline: 10px;
+  }
+  .button,
+  .account-panel .button {
+    padding: 11px 14px;
+  }
+  .task-form {
+    padding: 16px;
+  }
+  .task-form > label {
+    flex-basis: 100%;
+  }
+  .eisenhower-grid {
+    gap: 18px;
+  }
+  .quadrant {
+    padding: 16px;
+  }
+  .focus-details {
+    padding: 16px;
+  }
+  .workspace-outputs {
+    gap: 14px;
+  }
+  .habit-form {
+    padding: 18px;
+  }
+  .habit-table-scroll {
+    padding: 8px;
+  }
+  .habit-table {
+    border-spacing: 5px;
+  }
+  .habit-cell {
+    min-height: 44px;
+    border-radius: 10px;
+  }
+  .metric-grid article {
+    padding: 18px;
+  }
+  .planner-settings {
+    padding: 20px;
+  }
+  .account-panel {
+    padding: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .button:hover:not(:disabled),
+  .button:active:not(:disabled),
+  .account-panel .button:hover:not(:disabled),
+  .account-panel .button:active:not(:disabled),
+  .app-nav button:hover:not(:disabled),
+  .app-nav button:active:not(:disabled),
+  .mode-tabs button:hover:not(:disabled),
+  .mode-tabs button:active:not(:disabled),
+  .presets button:hover:not(:disabled),
+  .presets button:active:not(:disabled),
+  .habit-cell:active:not(:disabled) {
+    transform: none;
+  }
+}
+/* Compact timeline controls must not overlap on 15–30 minute blocks. */
+.time-block,
+.month-block {
+  line-height: 1.25;
+}
+.time-block .edit-block {
+  line-height: 1;
+  height: 14px;
+  min-height: 0;
+  padding: 0 4px;
+}
+.app-shell .header {
+  max-width: none;
+}
+.task-board > h2 {
+  margin-top: 0;
+  font-size: clamp(28px, 4vw, 38px);
+  letter-spacing: -0.04em;
+  line-height: 1.35;
+}
+@media (prefers-reduced-motion: reduce) {
+  button:active:not(:disabled) {
+    transform: none;
+  }
+  progress::-webkit-progress-value {
+    transition: none !important;
+  }
+  progress::-moz-progress-bar {
+    transition: none !important;
+  }
+}

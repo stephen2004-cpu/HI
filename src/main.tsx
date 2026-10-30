@@ -12,8 +12,11 @@ import '@fontsource/manrope/latin-400.css';
 import '@fontsource/manrope/latin-500.css';
 import '@fontsource/manrope/latin-800.css';
 import './styles.css';
+import './interface.css';
+import InterfaceFeedback from './InterfaceFeedback';
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
+    <InterfaceFeedback />
     <PasswordRecovery>
       <AccountApp />
     </PasswordRecovery>
