@@ -10,7 +10,6 @@ import {
   Coffee,
   Expand,
   Headphones,
-  Hourglass,
   Maximize2,
   Pause,
   Play,
@@ -625,7 +624,13 @@ export default function App() {
       <header className="header">
         <a href="#" className="wordmark" aria-label="LBD Focus trang chủ">
           <span className="brand-symbol">
-            <Hourglass size={20} />
+            <img
+              src="/brand/falcon-mark.png"
+              alt=""
+              width={365}
+              height={310}
+              decoding="async"
+            />
           </span>
           <span>
             LBD<span className="brand-light"> FOCUS</span>

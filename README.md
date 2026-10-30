@@ -74,7 +74,7 @@ src/
 e2e/app.spec.ts                 Kiểm thử tương tác trình duyệt
 ```
 
-Các biến màu nằm ở `:root` trong `src/styles.css`: `--bg`, `--surface`, `--cream`, `--gold`, `--muted`, `--line`. Thay các biến này để áp dụng Brand Kit. Logo tạm là chữ **LBD FOCUS** và biểu tượng đồng hồ từ Lucide, có thể thay tại header trong `App.tsx`. Typography dùng Be Vietnam Pro và Manrope, đóng gói cục bộ bằng Fontsource; icon Lucide. Không sao chép mã, logo hoặc tài sản từ website tham khảo.
+Các biến màu nằm ở `:root` trong `src/styles.css`: `--bg`, `--surface`, `--cream`, `--gold`, `--muted`, `--line`. Thay các biến này để áp dụng Brand Kit. Logo Header dùng chim ưng vàng Concept 02 trích nguyên bản từ `LBD_GO_Infographic_va_Prompt.png`; chữ **LBD FOCUS** và dòng tác giả được giữ nguyên. Xem [nguồn ảnh và cách trích icon](docs/falcon-branding.md). Typography dùng Be Vietnam Pro và Manrope, đóng gói cục bộ bằng Fontsource; icon Lucide. Không sao chép mã, logo hoặc tài sản từ website tham khảo.
 
 ## Lưu lên GitHub
 
@@ -330,3 +330,11 @@ Trang Task mặc định xem hôm nay, gộp nhiều Time Block thành một th�
 Task chưa lên lịch và quá hạn. Có bộ lọc trạng thái, số lượng theo nhóm, thu gọn
 nhóm và mở Calendar để chủ động lên lịch. Không có migration hay khóa lưu trữ mới.
 Xem [quy tắc ngày, Habit, dữ liệu và trạng thái logo Chim Ưng](docs/task-periods.md).
+
+## Logo Chim Ưng Vàng Concept 02
+
+Đã thay biểu tượng Header, favicon ICO/PNG và Apple Touch Icon từ ảnh gốc
+`LBD_GO_Infographic_va_Prompt.png` vừa được cung cấp trong Git. Có App Icon
+192/512 px; không vẽ lại logo, không thêm PWA/service worker. Các ghi chú chờ
+logo ở những giai đoạn trước là lịch sử và đã được xử lý ở bản cập nhật này.
+Xem [vùng cắt, kiểm tra pixel, kích thước và cách tạo lại](docs/falcon-branding.md).

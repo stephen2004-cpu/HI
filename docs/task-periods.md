@@ -71,19 +71,14 @@ This also means it does not automatically repair orphaned records from a damaged
 cache; use the existing backup/import controls for deliberate recovery. No block,
 Habit log or Focus Session is deleted by this guard.
 
-## Falcon Gold Concept 02 — not changed
+## Falcon Gold Concept 02 — completed in the subsequent branding update
 
-The supplied inline brand board has multiple logo presentations and mockups. No
-standalone original PNG/SVG or readable original brand-board image file exists in
-the checked-out repository/available attachments. Only the request text is exposed
-as a downloadable attachment. An exact pixel extraction therefore could not be
-performed/verified. Generative recreation or tracing would violate the request to
-preserve the original falcon design.
-
-Per the user's fallback rule, the existing Header symbol and favicon are retained.
-No official falcon replacement is claimed. A source PNG/SVG (or accessible original
-board for exact extraction) is needed to finish this part. No PWA manifest is
-currently configured; this change adds no substitute icons or new PWA behavior.
+At the time this filtering change was implemented, only the inline brand board
+was available, so the old mark was retained rather than recreated. The user has
+since uploaded `LBD_GO_Infographic_va_Prompt.png` to Git. Header, favicon and native
+icons now use verified pixel crops of that original Concept 02 board; see
+[the branding extraction/provenance report](falcon-branding.md). No new PWA mode,
+service worker or business functionality was added by the branding update.
 
 ## Review and verification
 
