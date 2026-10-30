@@ -1,5 +1,7 @@
 # Sửa lỗi Habit vẫn hiện sau khi xác nhận xóa
 
+**Cập nhật 31/10/2026:** người dùng đã báo bốn cờ bảo vệ đều false và có JSON sao lưu. Với trạng thái đó, dùng [file cài có transaction và kiểm tra tương thích](install-habit-deletion.md) thay cho quy trình cài thủ công ở dưới; không cần tạo thêm Supabase Project. Ghi nhận và kết quả bên dưới thuộc lần điều tra trước, không phải xác nhận mới về database thật.
+
 ## Những gì xác nhận được
 
 Code trước bản sửa chặn xóa tài khoản khi RPC `lbd_habit_deletion_capabilities` lỗi hoặc không trả về số `1`. Đây là cơ chế bảo vệ cần giữ: xóa cục bộ khi máy chủ chưa có ledger/triggers có thể bị thiết bị cũ ghi đè.
