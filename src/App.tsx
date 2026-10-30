@@ -52,6 +52,7 @@ import {
 } from './tasks';
 import FocusDetails from './components/FocusDetails';
 import HabitTracker from './components/HabitTracker';
+import UserGuide from './components/UserGuide';
 import { validDate, loadHabits, habitOccurrence, type Habit } from './habits';
 import {
   generateHabitRange,
@@ -649,6 +650,7 @@ export default function App() {
           >
             <Bell size={18} />
           </button>
+          <UserGuide />
         </div>
       </header>
       <nav className="app-nav" aria-label="Điều hướng chính">
