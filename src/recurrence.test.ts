@@ -235,7 +235,8 @@ it('never regenerates deleted habits and hides future automatic blocks even for 
     new Set(generated.tasks.map((t) => t.id)),
     now,
   );
-  expect(visible).toHaveLength(1);
+  // Deleted Habit blocks remain stored as history but are absent in every Calendar view.
+  expect(visible).toHaveLength(0);
   const later = generateHabitRange(
     [dead],
     generated.planner,

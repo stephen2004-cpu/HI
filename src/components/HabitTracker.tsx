@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { habitDeletionIssue } from '../habitDeletion';
 import { supabase } from '../supabase';
 import { workspaceUser } from '../workspaceStorage';
+import { deletionStatus } from '../habitDeletionStatus';
 import {
   Check,
   Moon,
@@ -20,6 +21,9 @@ import {
   localDate,
   saveHabits,
   type Habit,
+  type HabitEnding,
+  habitScheduledOn,
+  validDate,
   setHabitSchedule,
   recurrenceState,
   pauseHabit,
@@ -64,7 +68,17 @@ export default function HabitTracker({
     [occurrence, setOccurrence] = useState(localDate(new Date())),
     [automatic, setAutomatic] = useState(true),
     [scheduleTime, setScheduleTime] = useState('09:00'),
-    [scheduleStart, setScheduleStart] = useState(localDate(new Date()));
+    [scheduleStart, setScheduleStart] = useState(localDate(new Date())),
+    [endingType, setEndingType] = useState<'none' | 'count' | 'date'>('none'),
+    [repeatCount, setRepeatCount] = useState(10),
+    [endDate, setEndDate] = useState(localDate(new Date()));
+  const [, refreshDeletionStatus] = useState(0);
+  useEffect(() => {
+    const refresh = () => refreshDeletionStatus((n) => n + 1);
+    window.addEventListener('lbd-habit-deletion-status', refresh);
+    return () =>
+      window.removeEventListener('lbd-habit-deletion-status', refresh);
+  }, []);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -142,7 +156,36 @@ export default function HabitTracker({
             id: editing ?? crypto.randomUUID(),
             logs: habits.find((h) => h.id === editing)?.logs ?? {},
           };
-          if (automatic) h = setHabitSchedule(h, scheduleStart, scheduleTime);
+          const ending: HabitEnding | undefined =
+            endingType === 'count'
+              ? { type: 'count', count: repeatCount }
+              : endingType === 'date'
+                ? { type: 'date', date: endDate }
+                : undefined;
+          if (
+            !validDate(scheduleStart) ||
+            (ending?.type === 'count' &&
+              (!Number.isSafeInteger(ending.count) || ending.count < 1)) ||
+            (ending?.type === 'date' &&
+              (!validDate(ending.date) || ending.date < scheduleStart))
+          ) {
+            setError(
+              'Chọn ngày bắt đầu và kết thúc hợp lệ; số lần phải là số nguyên dương. Chưa lưu thay đổi.',
+            );
+            return;
+          }
+          h = setHabitSchedule(
+            h,
+            scheduleStart,
+            scheduleTime,
+            new Date(),
+            ending,
+          );
+          if (h.recurrence)
+            h = {
+              ...h,
+              recurrence: { ...h.recurrence, trackingOnly: !automatic },
+            };
           if (
             commit(
               editing
@@ -155,6 +198,9 @@ export default function HabitTracker({
             setAutomatic(true);
             setScheduleTime('09:00');
             setScheduleStart(localDate(new Date()));
+            setEndingType('none');
+            setRepeatCount(10);
+            setEndDate(localDate(new Date()));
           }
         }}
       >
@@ -208,44 +254,44 @@ export default function HabitTracker({
           <input
             type="checkbox"
             checked={automatic}
-            disabled={!!draft.recurrence}
+            disabled={!!draft.recurrence && !draft.recurrence.trackingOnly}
             onChange={(e) => setAutomatic(e.target.checked)}
           />
           Lịch lặp tự động trên Calendar
         </label>
-        {automatic && (
-          <>
-            <label>
-              Ngày bắt đầu lặp
-              <input
-                type="date"
-                required
-                value={scheduleStart}
-                disabled={recurrenceState(draft as Habit) === 'ended'}
-                onChange={(e) => setScheduleStart(e.target.value)}
-              />
-            </label>
-            <label>
-              Giờ bắt đầu lặp
-              <input
-                type="time"
-                required
-                value={scheduleTime}
-                disabled={recurrenceState(draft as Habit) === 'ended'}
-                onChange={(e) => setScheduleTime(e.target.value)}
-              />
-            </label>
-            <p className="habit-schedule-help">
-              Lặp các ngày đã chọn qua mọi tuần. Thời lượng dùng “Phút khi kết
-              nối Focus”. Đổi lịch chỉ áp dụng từ hôm nay; các lần đã thực hiện
-              vẫn được giữ. Lịch dùng múi giờ trình duyệt.
-            </p>
-          </>
-        )}
+        <>
+          <label>
+            Ngày bắt đầu lặp
+            <input
+              type="date"
+              required
+              value={scheduleStart}
+              disabled={draft.recurrence?.endedAt !== undefined}
+              onChange={(e) => setScheduleStart(e.target.value)}
+            />
+          </label>
+          <label>
+            Giờ bắt đầu lặp
+            <input
+              type="time"
+              required
+              value={scheduleTime}
+              disabled={draft.recurrence?.endedAt !== undefined}
+              onChange={(e) => setScheduleTime(e.target.value)}
+            />
+          </label>
+          <p className="habit-schedule-help">
+            Lặp theo các ngày và giới hạn bên dưới. Khi tắt Calendar chỉ theo
+            dõi ngày; không tự tạo Time Block. Thời lượng dùng “Phút khi kết nối
+            Focus”. Đổi lịch áp dụng từ hôm nay nếu chưa bắt đầu; nếu lần hôm
+            nay đã bắt đầu hoặc ghi nhận thì áp dụng từ ngày mai. Lịch sử được
+            giữ. Lịch dùng múi giờ trình duyệt.
+          </p>
+        </>
         <fieldset className="habit-repeat">
           <legend>Ngày lặp lại</legend>
           {[1, 2, 3, 4, 5, 6, 0].map((d) => (
-            <label key={d}>
+            <label key={d} className={draft.days.includes(d) ? 'selected' : ''}>
               <input
                 type="checkbox"
                 checked={draft.days.includes(d)}
@@ -267,6 +313,79 @@ export default function HabitTracker({
             </label>
           ))}
         </fieldset>
+        <fieldset className="habit-ending">
+          <legend>Kết thúc lặp lại</legend>
+          <label>
+            <input
+              type="radio"
+              name="habit-ending"
+              checked={endingType === 'none'}
+              onChange={() => setEndingType('none')}
+            />
+            Không giới hạn
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="habit-ending"
+              checked={endingType === 'count'}
+              onChange={() => setEndingType('count')}
+            />
+            Sau{' '}
+            <input
+              type="number"
+              aria-label="Số lần xuất hiện"
+              min={1}
+              step={1}
+              required={endingType === 'count'}
+              disabled={
+                endingType !== 'count' ||
+                draft.recurrence?.endedAt !== undefined
+              }
+              value={repeatCount}
+              onChange={(e) => setRepeatCount(Number(e.target.value))}
+            />{' '}
+            lần xuất hiện
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="habit-ending"
+              checked={endingType === 'date'}
+              onChange={() => setEndingType('date')}
+            />
+            Đến ngày{' '}
+            <input
+              type="date"
+              aria-label="Ngày kết thúc lặp"
+              min={scheduleStart}
+              required={endingType === 'date'}
+              disabled={
+                endingType !== 'date' || draft.recurrence?.endedAt !== undefined
+              }
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </label>
+          <p className="habit-repeat-preview">
+            {[1, 2, 3, 4, 5, 6, 0]
+              .filter((d) => draft.days.includes(d))
+              .map((d) => weekday[d])
+              .join(', ')}{' '}
+            ·{' '}
+            {endingType === 'count'
+              ? `Tổng ${repeatCount} lần`
+              : endingType === 'date'
+                ? `Đến ${endDate}`
+                : 'Không giới hạn'}{' '}
+            · Bắt đầu {scheduleStart}
+          </p>
+          <small>
+            Số lần tính các lần được lên lịch, kể cả bỏ lỡ; không phải số lần
+            hoàn thành. Sửa giới hạn tiếp tục tính cho cùng Habit, không đặt lại
+            lịch sử. Tạm dừng lịch không tính các ngày bị tạm dừng.
+          </small>
+        </fieldset>
         <button
           className="button primary"
           disabled={loaded.error || !draft.days.length}
@@ -281,6 +400,12 @@ export default function HabitTracker({
             onClick={() => {
               setEditing(null);
               setDraft(blank);
+              setAutomatic(true);
+              setScheduleStart(localDate(new Date()));
+              setScheduleTime('09:00');
+              setEndingType('none');
+              setRepeatCount(10);
+              setEndDate(localDate(new Date()));
             }}
           >
             Hủy sửa thói quen
@@ -331,12 +456,15 @@ export default function HabitTracker({
             <h2 id="delete-habit-title">Xóa vĩnh viễn thói quen?</h2>
             <p>
               “{habits.find((h) => h.id === deleting)?.name}” sẽ không thể khôi
-              phục. Dừng toàn bộ lịch lặp và ẩn các Time Block tự động trong
-              tương lai. Task độc lập và Focus History được giữ nguyên.
+              phục trong ứng dụng. Dừng lịch lặp và bỏ các Time Block của Habit
+              khỏi mọi chế độ Calendar; bản ghi lịch sử vẫn được giữ trong dữ
+              liệu. Task độc lập và Focus History được giữ nguyên.
             </p>
             <p>
               Mặc định giữ lịch sử đánh dấu trong bản ghi đã xóa để có thể xuất
-              sao lưu, không hiển thị trong danh sách thói quen.
+              sao lưu, không hiển thị trong danh sách thói quen. Máy chủ vẫn giữ
+              dấu xóa để chống phục hồi từ thiết bị cũ; đây không phải xóa vật
+              lý toàn bộ dữ liệu cá nhân.
             </p>
             {deletionError && (
               <p role="alert" className="habit-deletion-error">
@@ -450,6 +578,35 @@ export default function HabitTracker({
           </section>
         </div>
       )}
+      {habits.some((h) => h.deletedAt !== undefined) && (
+        <section
+          className="habit-deletion-status"
+          aria-label="Trạng thái xóa thói quen"
+        >
+          <h2>Trạng thái xóa thói quen</h2>
+          {habits
+            .filter((h) => h.deletedAt !== undefined)
+            .sort((a, b) => b.deletedAt! - a.deletedAt!)
+            .slice(0, 5)
+            .map((h) => {
+              const status = deletionStatus(h, workspaceUser());
+              return (
+                <p
+                  key={h.id}
+                  role={status.phase === 'error' ? 'alert' : 'status'}
+                  data-deletion-phase={status.phase}
+                >
+                  <strong>{h.name} · </strong>
+                  {status.text}
+                </p>
+              );
+            })}
+          <small>
+            Dấu xóa được giữ để chống phục hồi. Lịch sử đánh dấu mặc định được
+            giữ; Task độc lập và Focus History không bị xóa.
+          </small>
+        </section>
+      )}
       <div className="habit-toolbar">
         <div>
           <button
@@ -552,7 +709,19 @@ export default function HabitTracker({
                         onClick={() => {
                           setEditing(h.id);
                           setDraft({ ...h });
-                          setAutomatic(!!h.recurrence);
+                          const ending = h.recurrence?.rules.at(-1)?.ending;
+                          setEndingType(ending?.type ?? 'none');
+                          setRepeatCount(
+                            ending?.type === 'count' ? ending.count : 10,
+                          );
+                          setEndDate(
+                            ending?.type === 'date'
+                              ? ending.date
+                              : localDate(new Date()),
+                          );
+                          setAutomatic(
+                            !!h.recurrence && !h.recurrence.trackingOnly,
+                          );
                           setScheduleTime(
                             h.recurrence?.rules.at(-1)?.time ?? '09:00',
                           );
@@ -568,7 +737,7 @@ export default function HabitTracker({
                     {days.map((d) => {
                       const key = localDate(d),
                         status = h.logs[key],
-                        scheduled = h.days.includes(d.getDay());
+                        scheduled = !!h.logs[key] || habitScheduledOn(h, key);
                       return (
                         <td key={key}>
                           <button

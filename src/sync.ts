@@ -1,4 +1,8 @@
 import { mergeHabitDeletions } from './habits';
+import {
+  acknowledgeHabitDeletions,
+  noteHabitSyncPhase,
+} from './habitDeletionStatus';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   backupAccount,
@@ -35,6 +39,7 @@ export class WorkspaceSync {
   ) {}
   private notify(status: SyncStatus, message: string, reload = false) {
     if (this.stopped) return;
+    noteHabitSyncPhase(this.id, status);
     this.status = status;
     this.message = message;
     this.changed(status, message, reload);
@@ -49,6 +54,8 @@ export class WorkspaceSync {
       (data.payload !== null && !validWorkspace(data.payload))
     )
       throw Error('Dữ liệu máy chủ không hợp lệ hoặc khác phiên bản.');
+    if (!this.stopped)
+      acknowledgeHabitDeletions(this.id, data.payload?.habits.habits ?? []);
     return data as { revision: number; payload: Workspace | null };
   }
   private retainRemoteDeletions(payload: Workspace | null) {
@@ -164,9 +171,36 @@ export class WorkspaceSync {
           throw error;
         }
         if (!Number.isSafeInteger(data)) throw Error('Invalid revision');
-        const stillDirty =
-          JSON.stringify(readWorkspace(this.id)) !== serialized;
+        let stillDirty = JSON.stringify(readWorkspace(this.id)) !== serialized;
         writeMeta(this.id, { revision: data, dirty: stillDirty });
+        // A write/revision alone is not a server acknowledgement of this deletion.
+        if (
+          !stillDirty &&
+          snapshot.habits.habits.some((h) => h.deletedAt !== undefined)
+        ) {
+          const readBack = await this.remote();
+          if (this.stopped) return;
+          const expected = snapshot.habits.habits.filter(
+            (h) => h.deletedAt !== undefined,
+          );
+          if (
+            expected.some(
+              (h) =>
+                !readBack.payload?.habits.habits.some(
+                  (server) =>
+                    server.id === h.id &&
+                    server.deletedAt === h.deletedAt &&
+                    (server.deletedHistory === true) ===
+                      (h.deletedHistory === true),
+                ),
+            )
+          ) {
+            writeMeta(this.id, { revision: data, dirty: true });
+            throw Error('Server has not confirmed the deletion marker.');
+          }
+          stillDirty = JSON.stringify(readWorkspace(this.id)) !== serialized;
+          writeMeta(this.id, { revision: data, dirty: stillDirty });
+        }
         this.notify(
           stillDirty ? 'pending' : 'synced',
           stillDirty ? 'Có thay đổi mới đang chờ gửi.' : 'Đã đồng bộ.',

@@ -216,3 +216,95 @@ it('explicit backup import never restores a permanently deleted habit or its era
   expect(mergeGuest(account, guest).habits.habits[0].logs).toEqual({});
   expect(mergeGuest(guest, account).habits.habits[0].deletedAt).toBe(1234);
 });
+
+it('requires a server read-back tombstone before confirming deletion; revision-only writes and read failures do not confirm', async () => {
+  const { deletionStatus } = await import('./habitDeletionStatus');
+  const id = 'deletion-readback';
+  const w = emptyWorkspace();
+  const h = {
+    id: 'gym',
+    name: 'GYM',
+    category: 'Cá nhân',
+    days: [1],
+    weeklyTarget: 1,
+    minutes: 25,
+    archived: true,
+    deletedAt: 123456,
+    logs: { '2026-10-26': 'done' as const },
+  };
+  w.habits.habits = [h];
+  storeWorkspace(id, w);
+  writeMeta(id, { revision: 0, dirty: true });
+  let readError = false,
+    accepted = false;
+  const client = {
+    rpc: vi.fn(async (name: string) => {
+      if (name === 'lbd_commit_workspace') {
+        accepted = true;
+        return { data: 1, error: null };
+      }
+      if (readError) return { data: null, error: { code: 'NETWORK' } };
+      return {
+        data: {
+          revision: accepted ? 1 : 0,
+          payload: accepted ? w : emptyWorkspace(),
+        },
+        error: null,
+      };
+    }),
+  } as unknown as SupabaseClient;
+  const engine = new WorkspaceSync(client, id, vi.fn());
+  await engine.start();
+  expect(deletionStatus(h, id).phase).toBe('pending');
+  readError = true;
+  await engine.tick();
+  expect(deletionStatus(h, id).phase).toBe('error');
+  expect(readWorkspace(id).habits.habits[0]).toEqual(h);
+  readError = false;
+  await engine.tick();
+  expect(deletionStatus(h, id).phase).toBe('confirmed');
+  expect(deletionStatus(h, null).phase).toBe('local');
+  engine.stop();
+});
+it('does not accept a revision when the server read lacks the requested deletion and preserves edits during later read-back', async () => {
+  const { deletionStatus } = await import('./habitDeletionStatus');
+  const id = 'missing-server-marker';
+  const w = emptyWorkspace();
+  w.habits.habits = [
+    {
+      id: 'gym',
+      name: 'GYM',
+      category: 'Cá nhân',
+      days: [1],
+      weeklyTarget: 1,
+      minutes: 25,
+      archived: true,
+      deletedAt: 777,
+      logs: {},
+    },
+  ];
+  storeWorkspace(id, w);
+  writeMeta(id, { revision: 0, dirty: true });
+  let reads = 0,
+    accept = false;
+  const client = {
+    rpc: vi.fn(async (name: string) => {
+      if (name === 'lbd_commit_workspace')
+        return { data: ++reads, error: null };
+      return {
+        data: { revision: reads, payload: accept ? w : emptyWorkspace() },
+        error: null,
+      };
+    }),
+  } as unknown as SupabaseClient;
+  const e = new WorkspaceSync(client, id, vi.fn());
+  await e.start();
+  await e.tick();
+  expect(e.status).toBe('error');
+  expect(readMeta(id).dirty).toBe(true);
+  expect(deletionStatus(w.habits.habits[0], id).phase).toBe('error');
+  accept = true;
+  await e.tick();
+  expect(deletionStatus(w.habits.habits[0], id).phase).toBe('confirmed');
+  e.stop();
+});

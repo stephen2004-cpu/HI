@@ -182,6 +182,15 @@ export default function App() {
       setNotice('Chọn ngày thực hiện hợp lệ.');
       return;
     }
+    if (
+      habit.deletedAt !== undefined ||
+      (habit.recurrence && !habitOccurrence(habit, date))
+    ) {
+      setNotice(
+        'Ngày này không thuộc lịch Habit, đang tạm dừng hoặc đã hết giới hạn lặp. Chưa tạo Task hay Time Block.',
+      );
+      return;
+    }
     if (destination === 'focus' && dataRef.current.snapshot.run) {
       setNotice(
         'Đang có phiên Focus. Kết thúc phiên trước khi mở lần thực hiện khác.',

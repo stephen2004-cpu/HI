@@ -1,5 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { groups, plannedTask, type Task } from '../tasks';
+import useCurrentTime from '../useCurrentTime';
+import { localNowPosition } from '../currentTime';
 import {
   addDays,
   blockColor,
@@ -36,6 +38,9 @@ export default function Calendar({
   focusTask,
   locked,
 }: Props) {
+  const now = useCurrentTime();
+  const scroll = useRef<HTMLDivElement>(null);
+  const scrolled = useRef(false);
   const [miniOpen, setMiniOpen] = useState(() => window.innerWidth > 800);
   const [completion, setCompletion] = useState('all');
   const blocks = planner.blocks.filter(
@@ -81,6 +86,28 @@ export default function Calendar({
   useEffect(() => {
     onRange?.(rangeStart, rangeEnd);
   }, [+rangeStart, +rangeEnd, recurrenceToken]);
+  // One initial vertical scroll per mounted Calendar, never follow the clock/user scroll.
+  useEffect(() => {
+    if (
+      scrolled.current ||
+      view === 'month' ||
+      !days.some((d) => localNowPosition(d, now) !== null) ||
+      !scroll.current
+    )
+      return;
+    scroll.current.scrollTop = Math.max(
+      0,
+      now.getHours() * 60 + now.getMinutes() - 120,
+    );
+    scrolled.current = true;
+  }, [
+    view,
+    +rangeStart,
+    +rangeEnd,
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ]);
   const changeDate = (n: number) =>
     setDate(
       view === 'month'
@@ -378,7 +405,7 @@ export default function Calendar({
             ))}
           </div>
         ) : (
-          <div className="calendar-scroll">
+          <div className="calendar-scroll" ref={scroll}>
             <div
               className={`time-calendar ${view === 'day' ? 'single-day' : ''}`}
               style={{
@@ -388,7 +415,7 @@ export default function Calendar({
               <div className="day-heading">Giờ</div>
               {days.map((d) => (
                 <div
-                  className={`day-heading ${+d === +dayStart(new Date()) ? 'today' : ''}`}
+                  className={`day-heading ${+d === +dayStart(now) ? 'today' : ''}`}
                   key={+d}
                 >
                   {d.toLocaleDateString('vi-VN', { weekday: 'short' })}
@@ -421,6 +448,16 @@ export default function Calendar({
                       }}
                     />
                   ))}
+                  {localNowPosition(d, now) !== null && (
+                    <div
+                      className="calendar-now-line"
+                      aria-hidden="true"
+                      data-date={dateInput(+d).slice(0, 10)}
+                      style={{ top: localNowPosition(d, now)! }}
+                    >
+                      <span />
+                    </div>
+                  )}
                   {layoutDay(blocks, d).map(
                     ({ block: b, top, height, lane, lanes }) => (
                       <div

@@ -1,5 +1,12 @@
 import * as workspaceStorage from './workspaceStorage';
 import { addDays, dayStart, weekStart } from './planner';
+import {
+  allowedByEnding,
+  endingReached,
+  orderedRules,
+  type HabitEnding,
+} from './habitLimits';
+export type { HabitEnding } from './habitLimits';
 export type HabitStatus = 'done' | 'rest';
 export type Habit = {
   deletedAt?: number;
@@ -56,7 +63,7 @@ export function cycleLog(h: Habit, date: string, today = new Date()): Habit {
     h.archived ||
     !validDate(date) ||
     date > localDate(today) ||
-    !h.days.includes(new Date(`${date}T12:00:00`).getDay())
+    (!h.logs[date] && !habitScheduledOn(h, date))
   )
     return h;
   const logs = { ...h.logs };
@@ -80,7 +87,7 @@ export function habitProgress(h: Habit, date: Date, today = new Date()) {
   const earliest = dates[0];
   while (earliest && localDate(previous) >= earliest) {
     const key = localDate(previous);
-    if (h.days.includes(previous.getDay())) {
+    if (h.logs[key] || habitScheduledOn(h, key)) {
       if (h.logs[key] === 'done') streak++;
       else if (h.logs[key] !== 'rest') break;
     }
@@ -91,12 +98,14 @@ export function habitProgress(h: Habit, date: Date, today = new Date()) {
     monthDone: Object.entries(h.logs).filter(
       ([d, s]) => d.startsWith(monthPrefix) && s === 'done',
     ).length,
-    monthScheduled: monthDays.filter((d) => h.days.includes(d.getDay())).length,
+    monthScheduled: monthDays.filter((d) => habitScheduledOn(h, localDate(d)))
+      .length,
     streak,
   };
 }
 
 export type HabitRule = {
+  ending?: HabitEnding;
   id: string;
   effectiveDate: string;
   startDate: string;
@@ -105,6 +114,7 @@ export type HabitRule = {
   minutes: number;
 };
 export type HabitRecurrence = {
+  trackingOnly?: boolean;
   rules: HabitRule[];
   pauses: { from: number; to?: number }[];
   endedAt?: number;
@@ -112,6 +122,7 @@ export type HabitRecurrence = {
 export function validRecurrence(r: HabitRecurrence) {
   return (
     !!r &&
+    (r.trackingOnly === undefined || typeof r.trackingOnly === 'boolean') &&
     Array.isArray(r.rules) &&
     r.rules.length > 0 &&
     r.rules.every(
@@ -127,7 +138,14 @@ export function validRecurrence(r: HabitRecurrence) {
         x.days.every((n) => Number.isInteger(n) && n >= 0 && n <= 6) &&
         Number.isInteger(x.minutes) &&
         x.minutes >= 1 &&
-        x.minutes <= 1440,
+        x.minutes <= 1440 &&
+        (x.ending === undefined ||
+          (x.ending &&
+            (x.ending.type === 'count'
+              ? Number.isSafeInteger(x.ending.count) && x.ending.count > 0
+              : x.ending.type === 'date' &&
+                validDate(x.ending.date) &&
+                x.ending.date >= x.startDate))),
     ) &&
     Array.isArray(r.pauses) &&
     r.pauses.every(
@@ -142,22 +160,26 @@ export function validRecurrence(r: HabitRecurrence) {
 }
 export function recurrenceState(
   h: Habit,
+  now = new Date(),
 ): 'off' | 'active' | 'paused' | 'ended' {
   return !h.recurrence
     ? 'off'
-    : h.recurrence.endedAt !== undefined
+    : h.recurrence.endedAt !== undefined || endingReached(h.recurrence, now)
       ? 'ended'
-      : h.recurrence.pauses.some((p) => p.to === undefined)
-        ? 'paused'
-        : 'active';
+      : h.recurrence.trackingOnly
+        ? 'off'
+        : h.recurrence.pauses.some((p) => p.to === undefined)
+          ? 'paused'
+          : 'active';
 }
 export function setHabitSchedule(
   h: Habit,
   startDate: string,
   time: string,
   now = new Date(),
+  ending?: HabitEnding,
 ): Habit {
-  if (recurrenceState(h) === 'ended') return h;
+  if (h.recurrence?.endedAt !== undefined) return h;
   const r = h.recurrence ?? { rules: [], pauses: [] };
   const last = r.rules.at(-1);
   if (
@@ -165,21 +187,31 @@ export function setHabitSchedule(
     last.startDate === startDate &&
     last.time === time &&
     last.minutes === h.minutes &&
-    JSON.stringify(last.days) === JSON.stringify(h.days)
+    JSON.stringify([...last.days].sort()) ===
+      JSON.stringify([...h.days].sort()) &&
+    JSON.stringify(last.ending) === JSON.stringify(ending)
   )
     return h;
+  const today = localDate(now);
+  const alreadyStarted =
+    +new Date(`${today}T${time}:00`) <= +now ||
+    (habitOccurrence(h, today)?.start ?? Infinity) <= +now ||
+    !!h.logs?.[today];
   const rule: HabitRule = {
     id: crypto.randomUUID(),
-    effectiveDate: r.rules.length ? localDate(now) : startDate,
+    effectiveDate: r.rules.length
+      ? localDate(alreadyStarted ? addDays(now, 1) : now)
+      : startDate,
     startDate,
     time,
     days: [...h.days],
     minutes: h.minutes,
+    ...(ending ? { ending } : {}),
   };
   return { ...h, recurrence: { ...r, rules: [...r.rules, rule] } };
 }
 export function pauseHabit(h: Habit, now = Date.now()): Habit {
-  if (recurrenceState(h) !== 'active') return h;
+  if (recurrenceState(h, new Date(now)) !== 'active') return h;
   return {
     ...h,
     recurrence: {
@@ -189,7 +221,7 @@ export function pauseHabit(h: Habit, now = Date.now()): Habit {
   };
 }
 export function resumeHabit(h: Habit, now = Date.now()): Habit {
-  if (recurrenceState(h) !== 'paused') return h;
+  if (recurrenceState(h, new Date(now)) !== 'paused') return h;
   return {
     ...h,
     recurrence: {
@@ -201,19 +233,20 @@ export function resumeHabit(h: Habit, now = Date.now()): Habit {
   };
 }
 export function endHabit(h: Habit, now = Date.now()): Habit {
-  if (!h.recurrence || recurrenceState(h) === 'ended') return h;
+  if (!h.recurrence || h.recurrence.endedAt !== undefined) return h;
   return { ...h, recurrence: { ...h.recurrence, endedAt: now } };
 }
 export function habitOccurrence(h: Habit, date: string) {
   if (h.deletedAt !== undefined || !h.recurrence || !validDate(date))
     return undefined;
-  const rule = [...h.recurrence.rules]
+  const rule = orderedRules(h.recurrence)
     .reverse()
     .find((r) => r.effectiveDate <= date);
   if (
     !rule ||
     date < rule.startDate ||
-    !rule.days.includes(new Date(`${date}T12:00:00`).getDay())
+    !rule.days.includes(new Date(`${date}T12:00:00`).getDay()) ||
+    !allowedByEnding(h.recurrence, date)
   )
     return undefined;
   const start = new Date(`${date}T${rule.time}:00`).getTime();
@@ -232,12 +265,20 @@ export function habitOccurrence(h: Habit, date: string) {
   };
 }
 
+// Keep existing logs editable; untouched dates follow their effective historical rule.
+export function habitScheduledOn(h: Habit, date: string) {
+  if (!validDate(date)) return false;
+  return h.recurrence
+    ? !!habitOccurrence(h, date)
+    : h.days.includes(new Date(`${date}T12:00:00`).getDay());
+}
+
 export function archiveHabit(h: Habit, now = Date.now()): Habit {
   if (h.deletedAt !== undefined) return h;
   return {
     ...pauseHabit(h, now),
     archived: true,
-    resumeAfterArchive: recurrenceState(h) === 'active',
+    resumeAfterArchive: recurrenceState(h, new Date(now)) === 'active',
   };
 }
 export function restoreHabit(h: Habit, now = Date.now()): Habit {

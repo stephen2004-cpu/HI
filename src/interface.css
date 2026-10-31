@@ -1414,3 +1414,114 @@ footer {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* Habit recurrence controls extend the existing form only. */
+.habit-form .habit-repeat {
+  gap: 8px;
+}
+.habit-form .habit-repeat label {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  min-width: 39px;
+  min-height: 40px;
+  padding: 8px;
+  border: 1px solid #5a5140;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.habit-form .habit-repeat label.selected {
+  background: var(--gold);
+  color: #18140b;
+  border-color: var(--gold);
+}
+.habit-repeat label input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.habit-repeat label:has(input:focus-visible) {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+.habit-ending {
+  grid-column: 1 / -1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+}
+.habit-form .habit-ending > label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+.habit-ending input[type='radio'] {
+  width: 18px;
+  accent-color: var(--gold);
+}
+.habit-ending input[type='number'] {
+  width: 85px;
+}
+.habit-ending input[type='date'] {
+  width: min(180px, 100%);
+}
+.habit-repeat-preview {
+  color: var(--gold);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.habit-ending small {
+  display: block;
+  color: var(--muted);
+  line-height: 1.8;
+}
+/* Read-only time decoration is below Time Block contents and never receives input. */
+.calendar-now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--gold);
+  pointer-events: none;
+  z-index: 1;
+}
+.calendar-now-line > span {
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  pointer-events: none;
+}
+.calendar-scroll .time-block {
+  z-index: 2;
+}
+.habit-deletion-status {
+  padding: 16px;
+  margin: 20px 0;
+  border: 1px solid #51432c;
+  border-radius: 12px;
+  background: #1c1914;
+}
+.habit-deletion-status h2 {
+  font-size: 15px;
+  margin: 0 0 10px;
+}
+.habit-deletion-status p,
+.habit-deletion-status small {
+  font-size: 12px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.habit-deletion-status [data-deletion-phase='confirmed'] {
+  color: #acd5ac;
+}
+.habit-deletion-status [data-deletion-phase='error'] {
+  color: #ffd197;
+}

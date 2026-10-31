@@ -115,6 +115,12 @@ test('email signup, two-device sync, RLS, logout isolation and consented guest i
   await page
     .getByLabel('Lịch lặp tự động trên Calendar', { exact: true })
     .uncheck();
+  // This test uses today's date; finite/historical rules now enforce selected weekdays.
+  for (const day of ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'])
+    await page
+      .locator('.habit-repeat')
+      .getByLabel(day, { exact: true })
+      .check();
   await page
     .getByRole('button', { name: 'Tạo thói quen', exact: true })
     .click();
