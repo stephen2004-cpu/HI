@@ -15,7 +15,13 @@ test('task setup, calendar to workspace, live edits and outcome remain after rel
   await page.getByLabel('Nội dung bước 1').fill('Lên dàn ý');
   await page.getByRole('button', { name: 'Thêm bước', exact: true }).click();
   await page.getByLabel('Nội dung bước 2').fill('Viết nháp');
-  await page.getByRole('button', { name: 'Đưa bước 2 lên' }).click();
+  await page.getByRole('button', { name: 'Kéo sắp xếp bước 2' }).focus();
+  await page.keyboard.press('Space');
+  await expect(page.locator('.checklist-dragging')).toBeVisible();
+  await page.waitForTimeout(80);
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(220);
+  await page.keyboard.press('Space');
   await expect(page.getByLabel('Nội dung bước 1')).toHaveValue('Viết nháp');
   await page.getByRole('button', { name: 'Thêm Task', exact: true }).click();
   await page

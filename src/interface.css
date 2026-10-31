@@ -1239,3 +1239,178 @@ footer {
   line-height: 1.8;
   overflow-wrap: anywhere;
 }
+
+/* Checklist additions only: preserve the existing row fields, colors and buttons. */
+.checklist-step {
+  position: relative;
+  min-width: 0;
+  border-radius: 10px;
+}
+.checklist-step.checklist-dragging {
+  z-index: 25;
+  background: #24221d;
+  box-shadow:
+    0 10px 26px #0008,
+    0 0 0 1px #d5ac6480;
+}
+.checklist .checklist-grip {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.checklist .checklist-grip:active {
+  cursor: grabbing;
+}
+.checklist .checklist-grip:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+.checklist .step-materials {
+  margin: -3px 0 12px 38px;
+  border: 0;
+  font-size: 12px;
+  min-width: 0;
+}
+.step-materials > summary {
+  cursor: pointer;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: #b7aa8c;
+  width: fit-content;
+  min-height: 28px;
+  list-style: none;
+}
+.step-materials > summary::-webkit-details-marker {
+  display: none;
+}
+.step-materials > summary::after {
+  content: '⌄';
+  margin-left: 4px;
+}
+.step-materials[open] > summary::after {
+  content: '⌃';
+}
+.step-materials-content {
+  padding: 10px 0;
+}
+.step-document {
+  border: 1px solid #38342c;
+  background: #171819;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+.step-document > strong {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 13px;
+}
+.step-document > strong svg {
+  flex-shrink: 0;
+  color: var(--gold);
+}
+.step-materials .document-url {
+  color: #b8b3a9;
+  margin: 8px 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.step-materials .document-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.step-materials .document-actions .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 8px 10px;
+  min-height: 36px;
+}
+.step-materials .document-editor {
+  border-top: 1px solid #373129;
+  padding-top: 8px;
+}
+.checklist .document-editor label {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  font-size: 12px;
+}
+.checklist .document-editor input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  font-size: 12px;
+}
+.step-materials small,
+.step-materials [role='status'] {
+  color: #bdb8ad;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.step-materials [role='alert'] {
+  color: #ffd197;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .checklist .checklist-row {
+    gap: 6px;
+  }
+  .checklist .checklist-row .checklist-grip {
+    min-width: 30px;
+    min-height: 40px;
+  }
+  .checklist .step-materials {
+    margin-left: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .checklist-step {
+    transition: none !important;
+  }
+}
+
+/* Paperclip stays in the original row while collapsed; only opened resources add height. */
+.checklist .checklist-step {
+  padding-top: 1px;
+}
+.checklist .checklist-row {
+  padding-right: 40px;
+}
+.checklist .step-materials {
+  margin: 0;
+}
+.checklist .step-materials:not([open]) {
+  height: 0;
+}
+.checklist .step-materials > summary {
+  position: absolute;
+  right: 0;
+  top: 10px;
+  min-height: 36px;
+  max-width: 38px;
+  padding: 0 4px;
+}
+.checklist .step-materials > summary::after {
+  content: none;
+}
+.checklist .materials-label,
+.checklist-sr-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

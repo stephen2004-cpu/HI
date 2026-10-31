@@ -19,6 +19,7 @@ import {
   writeTasks,
   type Group,
   type Task,
+  type ChecklistStep,
 } from '../tasks';
 const empty: Omit<Task, 'id'> = {
   title: '',
@@ -557,8 +558,37 @@ export default function TaskBoard({
           Dùng màu nhóm
         </button>
         <TaskSetup
-          task={draft}
-          change={(patch) => setDraft({ ...draft, ...patch })}
+          key={editing ?? 'new-task'}
+          task={{ ...draft, id: editing ?? undefined }}
+          change={(patch) =>
+            setDraft((previous) => ({ ...previous, ...patch }))
+          }
+          changeChecklist={
+            editing
+              ? (checklist: ChecklistStep[]) => {
+                  const latest = readTasks();
+                  if (
+                    latest.error ||
+                    !latest.tasks.some((t) => t.id === editing)
+                  ) {
+                    setError(
+                      'Không đọc được Task để lưu Checklist. Chưa thay đổi dữ liệu.',
+                    );
+                    return false;
+                  }
+                  const ok = writeTasks(
+                    latest.tasks.map((t) =>
+                      t.id === editing ? { ...t, checklist } : t,
+                    ),
+                  );
+                  if (!ok)
+                    setError(
+                      'Không lưu được Checklist. Kiểm tra dung lượng hoặc quyền lưu trữ.',
+                    );
+                  return ok;
+                }
+              : undefined
+          }
         />
         <button className="button primary" disabled={loaded.error}>
           {editing ? 'Lưu Task' : 'Thêm Task'}

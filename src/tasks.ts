@@ -1,4 +1,6 @@
 import * as workspaceStorage from './workspaceStorage';
+import { validStepDocument, type ChecklistStep } from './checklist';
+export type { ChecklistStep } from './checklist';
 export const groups = [
   {
     id: 'do',
@@ -66,7 +68,12 @@ export function validTask(t: unknown): t is Task {
             s &&
             typeof s.id === 'string' &&
             typeof s.text === 'string' &&
-            typeof s.done === 'boolean',
+            typeof s.done === 'boolean' &&
+            (s.documents === undefined ||
+              (Array.isArray(s.documents) &&
+                s.documents.every(validStepDocument) &&
+                new Set(s.documents.map((d) => d.id)).size ===
+                  s.documents.length)),
         ))) &&
     (x.timing === undefined ||
       (x.timing &&
@@ -113,7 +120,6 @@ export function moveTask(tasks: Task[], id: string, group: Group): Task[] {
   return tasks.map((t) => (t.id === id ? { ...t, group } : t));
 }
 
-export type ChecklistStep = { id: string; text: string; done: boolean };
 export type TaskTiming = {
   mode: 'timer' | 'study';
   focusMinutes: number;
