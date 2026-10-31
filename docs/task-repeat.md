@@ -36,7 +36,7 @@ Không tuyên bố lỗi GYM trên project thật đã được sửa cho đến
 
 ### B. Bảo vệ xóa Task lặp
 
-Sau backup và xác nhận riêng, chạy toàn bộ `supabase/migrations/202610310002_task_repeat_deletions.sql` trong SQL Editor. Đây là migration bổ sung ledger/trigger và hai RPC có RLS owner; không đổi RPC workspace hay dữ liệu Task/Focus/Habit hiện có, không xóa dòng. Không chạy lại nếu đã/đang cài một phần. Chạy `supabase/diagnostics/task_repeat_readonly.sql` và yêu cầu tất cả cờ true, chỉ owner có SELECT ledger. Không chỉnh SQL để bỏ qua precondition.
+Sau backup và xác nhận riêng, chạy toàn bộ `supabase/manual/install_task_repeat_deletions_safe.sql` trong SQL Editor; wrapper dùng đúng migration `202610310002_task_repeat_deletions.sql`, không chạy cả hai. Xem [quy trình cho cả hai hệ thống xóa](deletion-protections-install.md). Đây là migration bổ sung ledger/trigger và hai RPC có RLS owner; không đổi RPC workspace hay dữ liệu Task/Focus/Habit hiện có, không xóa dòng. Không chạy lại nếu đã/đang cài một phần. Chạy `supabase/diagnostics/task_repeat_readonly.sql` và yêu cầu tất cả cờ true, chỉ owner có SELECT ledger. Không chỉnh SQL để bỏ qua precondition.
 
 Task ledger độc lập với Habit installer: đã kiểm thử cài Task trước rồi Habit trong database tạm. Đồng bộ đọc thêm ledger để giữ dấu xóa kể cả khi snapshot từ client cũ bỏ bản ghi Task. Client không có quyền sửa/xóa ledger hoặc đọc dấu xóa của tài khoản khác.
 

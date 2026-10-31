@@ -1,3 +1,4 @@
+import { taskDeletionIssue } from '../taskDeletion';
 import {
   scheduleOf,
   hasTaskStart,
@@ -443,10 +444,13 @@ export default function TaskBoard({
                       request !== deleteRequest.current
                     )
                       return;
-                    if (!result || result.error || result.data !== 1) {
-                      setDeleteError(
-                        'Chưa thể xóa Task lặp: cần RPC/bảo vệ tombstone Task trên Supabase. Chưa xóa Task. Xem docs/task-repeat.md.',
-                      );
+                    const issue = controller.signal.aborted
+                      ? 'Máy chủ phản hồi quá lâu. Chưa xóa Task; dữ liệu vẫn được giữ. Hãy thử lại.'
+                      : !result
+                        ? 'Chưa cấu hình kết nối Supabase. Chưa xóa Task; dữ liệu vẫn được giữ.'
+                        : taskDeletionIssue(result);
+                    if (issue) {
+                      setDeleteError(issue);
                       return;
                     }
                   }

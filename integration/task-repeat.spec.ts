@@ -286,3 +286,98 @@ test('series sync two devices; missing deletion RPC refuses safely; tombstones s
   await a.auth.signOut();
   await other.auth.signOut();
 });
+
+test('mobile Task deletion classifies capability failures and never mutates a Task before protection is confirmed', async ({
+  browser,
+}) => {
+  const a = client(),
+    email = `task-delete-errors-${randomUUID()}@example.com`,
+    pass = `Lbd-${randomUUID()}!`;
+  const signup = await a.auth.signUp({ email, password: pass });
+  expect(signup.error).toBeNull();
+  const user = signup.data.user!.id;
+  const source = {
+    id: 'keep-repeat',
+    title: 'Task kiểm thử giữ dữ liệu',
+    notes: 'Keep notes',
+    group: 'do' as const,
+    color: '',
+    completed: false,
+    checklist: [{ id: 's', text: 'Keep checklist', done: true }],
+  };
+  const { root, instance } = createTaskRepeat(source, {
+    mode: 'weekly',
+    startDate: '2026-10-26',
+    days: [1, 3, 5],
+    ending: { type: 'count', count: 5 },
+  });
+  const w = emptyWorkspace();
+  w.tasks.tasks = [root, instance];
+  expect(
+    (await a.rpc('lbd_commit_workspace', { expected_revision: 0, payload: w }))
+      .error,
+  ).toBeNull();
+  const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    }),
+    p = await context.newPage();
+  await login(p, email, pass);
+  await card(p, '2026-10-26')
+    .getByRole('button', { name: 'Xóa', exact: true })
+    .click();
+  const before = await p.evaluate(
+    (user) => localStorage.getItem(`lbd-account:${user}:lbd-focus-v2-tasks`),
+    user,
+  );
+  const panel = p.getByRole('group', { name: 'Xác nhận xóa Task' });
+  for (const failure of [
+    {
+      status: 404,
+      body: { code: 'PGRST202', message: 'secret token password' },
+      text: 'lbd_task_repeat_capabilities',
+    },
+    {
+      status: 403,
+      body: { code: '42501', message: 'secret token password' },
+      text: 'quyền EXECUTE',
+    },
+    {
+      status: 401,
+      body: { code: 'PGRST301', message: 'secret token password' },
+      text: 'Đăng nhập lại',
+    },
+    {
+      status: 500,
+      body: { code: 'XX000', message: 'secret token password' },
+      text: 'SQL chẩn đoán',
+    },
+    { status: 200, body: 2, text: 'phiên bản không hỗ trợ' },
+  ]) {
+    await p.route('**/rest/v1/rpc/lbd_task_repeat_capabilities', (route) =>
+      route.fulfill({
+        status: failure.status,
+        contentType: 'application/json',
+        body: JSON.stringify(failure.body),
+      }),
+    );
+    await panel
+      .getByRole('button', { name: 'Xác nhận xóa', exact: true })
+      .click();
+    await expect(panel.getByRole('alert')).toContainText(failure.text);
+    await expect(panel.getByRole('alert')).toContainText('Chưa xóa Task');
+    await expect(panel.getByRole('alert')).not.toContainText('secret');
+    expect(
+      await p.evaluate(
+        (user) =>
+          localStorage.getItem(`lbd-account:${user}:lbd-focus-v2-tasks`),
+        user,
+      ),
+    ).toBe(before);
+    await expect(card(p, '2026-10-26')).toHaveCount(1);
+    await p.unroute('**/rest/v1/rpc/lbd_task_repeat_capabilities');
+  }
+  await context.close();
+  await a.auth.signOut();
+});

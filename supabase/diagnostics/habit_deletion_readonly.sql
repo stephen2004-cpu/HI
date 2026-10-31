@@ -21,4 +21,8 @@ select policyname, cmd, roles, qual, with_check
  from pg_policies where schemaname='public' and tablename='lbd_habit_deletions';
 -- Expected owner_read / SELECT / authenticated / auth.uid() = user_id.
 -- No INSERT/UPDATE/DELETE policy should grant clients access to the ledger.
+select
+ not coalesce(has_table_privilege('authenticated',to_regclass('public.lbd_habit_deletions'),'INSERT,UPDATE,DELETE'),true) as habit_ledger_client_writes_denied,
+ not coalesce(has_table_privilege('anon',to_regclass('public.lbd_habit_deletions'),'SELECT,INSERT,UPDATE,DELETE'),true) as habit_ledger_anon_access_denied,
+ not coalesce(has_function_privilege('anon',to_regprocedure('public.lbd_habit_deletion_capabilities()'),'EXECUTE'),true) as habit_capability_anon_denied;
 rollback;
