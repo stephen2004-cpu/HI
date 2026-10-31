@@ -1,4 +1,16 @@
 import TaskSetup from './TaskSetup';
+import TaskRepeatEditor from './TaskRepeatEditor';
+import { supabase } from '../supabase';
+import { workspaceUser } from '../workspaceStorage';
+import {
+  defaultTaskRepeat,
+  futureTaskEffectiveDate,
+  createTaskRepeat,
+  editFutureTaskRepeat,
+  generateTaskRange,
+  repeatSettings,
+  type TaskRepeatSettings,
+} from '../taskRecurrence';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Planner, TimeBlock } from '../planner';
 import { localDate, validDate, type Habit } from '../habits';
@@ -16,6 +28,9 @@ import {
   timingOf,
   moveTask,
   readTasks,
+  readTaskStore,
+  writeTaskStore,
+  taskProtectedIds,
   writeTasks,
   type Group,
   type Task,
@@ -54,6 +69,11 @@ export default function TaskBoard({
   const [draft, setDraft] = useState(empty);
   const [editing, setEditing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [repeat, setRepeat] = useState<TaskRepeatSettings>(defaultTaskRepeat);
+  const [editScope, setEditScope] = useState<'single' | 'future'>('single');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [notice, setNotice] = useState('');
   const [dragging, setDragging] = useState<string | null>(null);
   const [period, setPeriod] = useState<TaskPeriod>('day');
   const [date, setDate] = useState(() => localDate(new Date()));
@@ -62,6 +82,19 @@ export default function TaskBoard({
     {},
   );
   const form = useRef<HTMLFormElement>(null);
+  const mounted = useRef(true),
+    deleteRequest = useRef(0);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      deleteRequest.current++;
+    };
+  }, []);
+  const editingTask = readTaskStore().tasks.find((t) => t.id === editing);
+  const editingSeries = editingTask?.repeatSeriesId
+    ? readTaskStore().tasks.find((t) => t.id === editingTask.repeatSeriesId)
+    : undefined;
   const range = taskRange(date, period);
   const habitToken = JSON.stringify(habits);
   useEffect(() => {
@@ -128,22 +161,67 @@ export default function TaskBoard({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!draft.title.trim()) return;
-    const task = {
+    const stored = readTaskStore();
+    if (stored.error) {
+      setError('Không đọc được dữ liệu Task. Chưa thay đổi dữ liệu.');
+      return;
+    }
+    const original = stored.tasks.find((t) => t.id === editing);
+    if (editing && (!original || original.deletedAt !== undefined)) {
+      setError('Task đã xóa hoặc thay đổi trên thiết bị khác. Chưa lưu.');
+      return;
+    }
+    const task: Task = {
       ...draft,
       timing: draft.timing ?? timingOf(),
       title: draft.title.trim(),
       id: editing ?? crypto.randomUUID(),
     };
-    const next = editing
-      ? tasks.map((t) => (t.id === editing ? task : t))
-      : [...tasks, task];
-    if (!loaded.error && writeTasks(next)) {
-      setTasks(next);
+    try {
+      let next: Task[];
+      let createdDate: string | undefined;
+      if (original?.repeatSeriesId) {
+        if (editScope === 'future')
+          next = editFutureTaskRepeat(
+            stored.tasks,
+            original,
+            task,
+            repeat,
+            taskProtectedIds(),
+          );
+        else
+          next = stored.tasks.map((t) =>
+            t.id === editing ? { ...task, repeatOverride: true } : t,
+          );
+      } else if (repeat.mode === 'weekly') {
+        const { root, instance } = createTaskRepeat(task, repeat);
+        createdDate = instance.repeatDate;
+        next = [
+          ...stored.tasks.filter((t) => t.id !== task.id),
+          root,
+          instance,
+        ];
+      } else
+        next = editing
+          ? stored.tasks.map((t) => (t.id === editing ? task : t))
+          : [...stored.tasks, task];
+      next = generateTaskRange(next, range.from, range.to, taskProtectedIds());
+      if (!writeTaskStore(next))
+        throw Error(
+          'Không lưu được Task. Nội dung nhập được giữ lại để thử lại.',
+        );
+      setTasks(readTasks().tasks);
       setError('');
+      setNotice('Đã lưu Task và quy tắc lặp. Không tự tạo Time Block.');
       setEditing(null);
       setDraft(empty);
-    } else if (!loaded.error)
-      setError('Không lưu được Task. Nội dung nhập được giữ lại để thử lại.');
+      setRepeat(defaultTaskRepeat());
+      setEditScope('single');
+      if (createdDate) setDate(createdDate);
+      onRange(range.from, range.to);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Không lưu được Task.');
+    }
   };
   const taskCard = (row: TaskRow) => {
     const t = row.task;
@@ -199,6 +277,9 @@ export default function TaskBoard({
             {groups.find((g) => g.id === t.group)!.name}
           </span>
           {row.overdue && <span className="task-overdue-label">Quá hạn</span>}
+          {t.repeatSeriesId && (
+            <span className="task-repeat-badge">Task lặp · {t.repeatDate}</span>
+          )}
           {t.habitId && (
             <span className="task-habit-label">
               Lần thực hiện Habit{t.habitDate ? ` · ${t.habitDate}` : ''}
@@ -268,6 +349,11 @@ export default function TaskBoard({
             onClick={() => {
               setEditing(t.id);
               setDraft({ ...t });
+              const root = readTaskStore().tasks.find(
+                (x) => x.id === t.repeatSeriesId,
+              );
+              setRepeat(repeatSettings(root, t.repeatDate));
+              setEditScope('single');
               showForm();
             }}
           >
@@ -276,7 +362,11 @@ export default function TaskBoard({
           <button
             className="button"
             disabled={loaded.error}
-            onClick={() => setDeleting(t.id)}
+            onClick={() => {
+              deleteRequest.current++;
+              setDeleting(t.id);
+              setDeleteError('');
+            }}
           >
             Xóa
           </button>
@@ -286,7 +376,9 @@ export default function TaskBoard({
             onClick={() =>
               scheduleTask(
                 t.id,
-                date < localDate(new Date()) ? localDate(new Date()) : date,
+                (t.repeatDate ?? date) < localDate(new Date())
+                  ? localDate(new Date())
+                  : (t.repeatDate ?? date),
               )
             }
           >
@@ -295,21 +387,93 @@ export default function TaskBoard({
         </div>
         {deleting === t.id && (
           <div role="group" aria-label="Xác nhận xóa Task">
-            <p>Xóa công việc này?</p>
+            <p>
+              {t.repeatSeriesId
+                ? 'Xóa riêng lần Task này? Dấu xóa được giữ để không tạo lại ngày này; các lần khác vẫn tiếp tục.'
+                : 'Xóa công việc này?'}
+            </p>
+            {deleteError && <p role="alert">{deleteError}</p>}
             <button
               className="button"
-              onClick={() => {
-                commit(tasks.filter((x) => x.id !== t.id));
-                setDeleting(null);
-                if (editing === t.id) {
-                  setEditing(null);
-                  setDraft(empty);
+              disabled={deleteBusy}
+              onClick={async () => {
+                setDeleteError('');
+                const scope = workspaceUser(),
+                  request = ++deleteRequest.current;
+                const controller = new AbortController(),
+                  timeout = setTimeout(() => controller.abort(), 12000);
+                setDeleteBusy(true);
+                try {
+                  if (t.repeatSeriesId && scope) {
+                    const result = await supabase
+                      ?.rpc('lbd_task_repeat_capabilities')
+                      .abortSignal(controller.signal);
+                    if (
+                      !mounted.current ||
+                      workspaceUser() !== scope ||
+                      request !== deleteRequest.current
+                    )
+                      return;
+                    if (!result || result.error || result.data !== 1) {
+                      setDeleteError(
+                        'Chưa thể xóa Task lặp: cần RPC/bảo vệ tombstone Task trên Supabase. Chưa xóa Task. Xem docs/task-repeat.md.',
+                      );
+                      return;
+                    }
+                  }
+                  if (
+                    !mounted.current ||
+                    workspaceUser() !== scope ||
+                    request !== deleteRequest.current
+                  )
+                    return;
+                  const latest = readTaskStore();
+                  if (latest.error)
+                    throw Error('Không đọc được Task mới nhất. Chưa xóa.');
+                  const next = t.repeatSeriesId
+                    ? latest.tasks.map((x) =>
+                        x.id === t.id ? { ...x, deletedAt: Date.now() } : x,
+                      )
+                    : latest.tasks.filter((x) => x.id !== t.id);
+                  if (!writeTaskStore(next))
+                    throw Error(
+                      'Không lưu được thao tác xóa. Dữ liệu cũ được giữ.',
+                    );
+                  setTasks(readTasks().tasks);
+                  setDeleting(null);
+                  setNotice(
+                    t.repeatSeriesId
+                      ? scope
+                        ? 'Đã ghi dấu xóa Task trên thiết bị; chờ đồng bộ máy chủ.'
+                        : 'Đã xóa lần Task trên thiết bị và giữ dấu xóa chống tạo lại.'
+                      : 'Đã xóa Task.',
+                  );
+                  if (editing === t.id) {
+                    setEditing(null);
+                    setDraft(empty);
+                    setRepeat(defaultTaskRepeat());
+                  }
+                } catch (e) {
+                  setDeleteError(
+                    e instanceof Error ? e.message : 'Không xóa được Task.',
+                  );
+                } finally {
+                  clearTimeout(timeout);
+                  if (mounted.current && request === deleteRequest.current)
+                    setDeleteBusy(false);
                 }
               }}
             >
               Xác nhận xóa
             </button>
-            <button className="button" onClick={() => setDeleting(null)}>
+            <button
+              className="button"
+              disabled={deleteBusy}
+              onClick={() => {
+                deleteRequest.current++;
+                setDeleting(null);
+              }}
+            >
               Hủy xóa
             </button>
           </div>
@@ -325,6 +489,7 @@ export default function TaskBoard({
         đổi màu thẻ.
       </p>
       {error && <p role="alert">{error}</p>}
+      {notice && <p role="status">{notice}</p>}
 
       <div className="task-period-toolbar">
         <div
@@ -394,7 +559,16 @@ export default function TaskBoard({
             </select>
           </label>
         </div>
-        <button className="button primary" onClick={showForm}>
+        <button
+          className="button primary"
+          onClick={() => {
+            setEditing(null);
+            setDraft(empty);
+            setRepeat(defaultTaskRepeat());
+            setEditScope('single');
+            showForm();
+          }}
+        >
           Tạo Task
         </button>
       </div>
@@ -557,14 +731,42 @@ export default function TaskBoard({
         >
           Dùng màu nhóm
         </button>
+        {!draft.habitId && (
+          <TaskRepeatEditor
+            settings={repeat}
+            change={setRepeat}
+            series={editingSeries}
+            effectiveDate={
+              editingTask?.repeatSeriesId
+                ? futureTaskEffectiveDate(editingTask, taskProtectedIds())
+                : undefined
+            }
+            scope={editScope}
+            setScope={(scope) => {
+              setEditScope(scope);
+              setRepeat(
+                repeatSettings(
+                  editingSeries,
+                  scope === 'future' && editingTask
+                    ? futureTaskEffectiveDate(editingTask, taskProtectedIds())
+                    : editingTask?.repeatDate,
+                ),
+              );
+            }}
+            instanceDate={(draft as Task).repeatDate}
+          />
+        )}
         <TaskSetup
           key={editing ?? 'new-task'}
           task={{ ...draft, id: editing ?? undefined }}
           change={(patch) =>
             setDraft((previous) => ({ ...previous, ...patch }))
           }
+          draftChecklist={
+            !!editingTask?.repeatSeriesId && editScope === 'future'
+          }
           changeChecklist={
-            editing
+            editing && !(editingTask?.repeatSeriesId && editScope === 'future')
               ? (checklist: ChecklistStep[]) => {
                   const latest = readTasks();
                   if (
@@ -600,6 +802,8 @@ export default function TaskBoard({
             onClick={() => {
               setEditing(null);
               setDraft(empty);
+              setRepeat(defaultTaskRepeat());
+              setEditScope('single');
             }}
           >
             Hủy sửa

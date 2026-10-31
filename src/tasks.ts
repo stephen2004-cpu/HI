@@ -1,5 +1,12 @@
 import * as workspaceStorage from './workspaceStorage';
 import { validStepDocument, type ChecklistStep } from './checklist';
+import {
+  validTaskRepeat,
+  visibleTaskInstances,
+  mergeTaskTombstones,
+  type TaskRepeat,
+} from './taskRecurrence';
+import { validDate } from './habits';
 export type { ChecklistStep } from './checklist';
 export const groups = [
   {
@@ -29,6 +36,11 @@ export const groups = [
 ] as const;
 export type Group = (typeof groups)[number]['id'];
 export type Task = {
+  repeat?: TaskRepeat;
+  repeatSeriesId?: string;
+  repeatDate?: string;
+  repeatOverride?: boolean;
+  deletedAt?: number;
   habitId?: string;
   habitDate?: string;
   checklist?: ChecklistStep[];
@@ -49,6 +61,18 @@ export function validTask(t: unknown): t is Task {
   if (!t || typeof t !== 'object') return false;
   const x = t as Task;
   return (
+    (x.repeat === undefined ||
+      (!x.repeatSeriesId && validTaskRepeat(x.repeat, validTask))) &&
+    (x.repeatSeriesId === undefined ||
+      (typeof x.repeatSeriesId === 'string' &&
+        !!x.repeatSeriesId &&
+        typeof x.repeatDate === 'string' &&
+        validDate(x.repeatDate))) &&
+    (x.repeatDate === undefined ||
+      (typeof x.repeatDate === 'string' && validDate(x.repeatDate))) &&
+    (x.repeatOverride === undefined || typeof x.repeatOverride === 'boolean') &&
+    (x.deletedAt === undefined ||
+      (Number.isSafeInteger(x.deletedAt) && x.deletedAt > 0)) &&
     typeof x.id === 'string' &&
     !!x.id &&
     typeof x.title === 'string' &&
@@ -89,7 +113,7 @@ export function validTask(t: unknown): t is Task {
         x.timing.breakMinutes <= 1440))
   );
 }
-export function readTasks(): { tasks: Task[]; error: boolean } {
+export function readTaskStore(): { tasks: Task[]; error: boolean } {
   try {
     const raw = workspaceStorage.getItem(TASK_KEY);
     if (raw === null) return { tasks: [], error: false };
@@ -106,15 +130,66 @@ export function readTasks(): { tasks: Task[]; error: boolean } {
     return { tasks: [], error: true };
   }
 }
-export function writeTasks(tasks: Task[]): boolean {
+export function taskProtectedIds() {
+  const ids = new Set<string>();
   try {
-    workspaceStorage.setItem(TASK_KEY, JSON.stringify({ version: 1, tasks }));
+    const snapshot = JSON.parse(
+      workspaceStorage.getItem('lbd-focus-v2-timer') ?? '{}',
+    ).snapshot;
+    if (snapshot?.run?.taskId) ids.add(snapshot.run.taskId);
+    snapshot?.history?.forEach((r: { taskId?: string }) => {
+      if (r.taskId) ids.add(r.taskId);
+    });
+  } catch {
+    /* Do not alter or repair timer data here. */
+  }
+  return ids;
+}
+export function readTasks(): { tasks: Task[]; error: boolean } {
+  const stored = readTaskStore();
+  return {
+    tasks: stored.error
+      ? []
+      : visibleTaskInstances(stored.tasks, new Date(), taskProtectedIds()),
+    error: stored.error,
+  };
+}
+export function writeTaskStore(tasks: Task[]): boolean {
+  try {
+    const existing = readTaskStore();
+    if (existing.error) return false;
+    const protectedTasks = mergeTaskTombstones(tasks, existing.tasks);
+    if (
+      !protectedTasks.every(validTask) ||
+      new Set(protectedTasks.map((t) => t.id)).size !== protectedTasks.length
+    )
+      return false;
+    workspaceStorage.setItem(
+      TASK_KEY,
+      JSON.stringify({ version: 1, tasks: protectedTasks }),
+    );
     if (typeof window !== 'undefined')
       window.dispatchEvent(new Event('lbd-tasks-updated'));
     return true;
   } catch {
     return false;
   }
+}
+export function writeTasks(tasks: Task[]): boolean {
+  const stored = readTaskStore();
+  if (stored.error) return false;
+  const kept = stored.tasks.filter(
+    (t) =>
+      !tasks.some((x) => x.id === t.id) &&
+      (t.repeat || t.repeatSeriesId || t.deletedAt !== undefined),
+  );
+  const next = tasks.map((t) => {
+    const old = stored.tasks.find((x) => x.id === t.id);
+    return t.repeatSeriesId && old && JSON.stringify(t) !== JSON.stringify(old)
+      ? { ...t, repeatOverride: true }
+      : t;
+  });
+  return writeTaskStore([...next, ...kept]);
 }
 export function moveTask(tasks: Task[], id: string, group: Group): Task[] {
   return tasks.map((t) => (t.id === id ? { ...t, group } : t));

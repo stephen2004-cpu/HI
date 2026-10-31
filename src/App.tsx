@@ -44,6 +44,9 @@ import Insights from './components/Insights';
 import PlannerSettings from './components/PlannerSettings';
 import {
   readTasks,
+  readTaskStore,
+  writeTaskStore,
+  taskProtectedIds,
   writeTasks,
   timingOf,
   taskSessions,
@@ -52,6 +55,7 @@ import {
 } from './tasks';
 import FocusDetails from './components/FocusDetails';
 import HabitTracker from './components/HabitTracker';
+import { generateTaskRange } from './taskRecurrence';
 import UserGuide from './components/UserGuide';
 import { validDate, loadHabits, habitOccurrence, type Habit } from './habits';
 import {
@@ -323,6 +327,18 @@ export default function App() {
       );
   const displayPlanner = { ...planner, blocks: displayBlocks };
   const ensureHabitRange = (from: Date, to: Date) => {
+    const stored = readTaskStore();
+    if (stored.error) return;
+    const repeated = generateTaskRange(
+      stored.tasks,
+      from,
+      to,
+      taskProtectedIds(),
+    );
+    if (repeated !== stored.tasks && !writeTaskStore(repeated)) {
+      setPlannerError('Không lưu được các lần Task lặp. Dữ liệu cũ được giữ.');
+      return;
+    }
     const habits = loadHabits(),
       tasks = readTasks();
     if (habits.error || tasks.error || plannerState.error) return;
@@ -761,6 +777,7 @@ export default function App() {
                       {taskState.tasks.map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.title}
+                          {t.repeatDate ? ` · ${t.repeatDate}` : ''}
                         </option>
                       ))}
                     </select>

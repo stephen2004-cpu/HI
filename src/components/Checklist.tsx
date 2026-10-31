@@ -32,12 +32,14 @@ function Step({
   remove,
   documents,
   savedTask,
+  draftOnly,
   move,
 }: {
   step: ChecklistStep;
   index: number;
   reduced: boolean;
   savedTask: boolean;
+  draftOnly: boolean;
   move: (delta: number) => void;
   patch: (patch: Partial<ChecklistStep>) => void;
   remove: () => void;
@@ -108,6 +110,7 @@ function Step({
         documents={step.documents ?? []}
         update={documents}
         savedTask={savedTask}
+        draftOnly={draftOnly}
       />
     </div>
   );
@@ -115,8 +118,10 @@ function Step({
 export default function Checklist({
   task,
   change,
+  draftOnly = false,
 }: {
   task: ChecklistTask;
+  draftOnly?: boolean;
   change: (patch: Partial<Task>, persist?: boolean) => boolean | void;
 }) {
   const steps = task.checklist ?? [];
@@ -227,6 +232,7 @@ export default function Checklist({
               index={index}
               reduced={reduced}
               savedTask={!!task.id}
+              draftOnly={draftOnly}
               move={(delta) => {
                 const index = latest.current.steps.findIndex(
                   (s) => s.id === step.id,

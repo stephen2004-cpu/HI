@@ -122,12 +122,14 @@ export default function Calendar({
     const task = tasks.find((t) => t.id === taskId);
     start ??= task?.plannedStart
       ? new Date(task.plannedStart).getTime()
-      : new Date(
-          date.getFullYear(),
-          date.getMonth(),
-          date.getDate(),
-          9,
-        ).getTime();
+      : task?.repeatDate
+        ? new Date(`${task.repeatDate}T09:00:00`).getTime()
+        : new Date(
+            date.getFullYear(),
+            date.getMonth(),
+            date.getDate(),
+            9,
+          ).getTime();
     setDraft({
       id: crypto.randomUUID(),
       taskId,
@@ -264,6 +266,7 @@ export default function Calendar({
               onClick={() => newBlock(t.id)}
             >
               {t.title}
+              {t.repeatDate ? ` · ${t.repeatDate}` : ''}
               <span>＋</span>
             </button>
           ))}
@@ -675,6 +678,7 @@ export default function Calendar({
                   {tasks.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.title}
+                      {t.repeatDate ? ` · ${t.repeatDate}` : ''}
                     </option>
                   ))}
                 </select>

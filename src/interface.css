@@ -1525,3 +1525,98 @@ footer {
 .habit-deletion-status [data-deletion-phase='error'] {
   color: #ffd197;
 }
+/* Task-only recurrence controls; no change to the surrounding Task board. */
+.task-repeat-editor {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  min-width: 0;
+}
+.task-form .task-repeat-editor > label {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.task-repeat-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+.task-form .task-repeat-days label {
+  width: auto;
+  flex: 0 0 auto;
+  flex-direction: row;
+  display: inline-flex;
+  position: relative;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 40px;
+  border: 1px solid #5a5140;
+  padding: 7px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.task-repeat-days .selected {
+  color: #18140b;
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.task-repeat-days input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.task-repeat-days label:has(input:focus-visible) {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+.task-repeat-ending {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  margin-top: 12px;
+  min-width: 0;
+}
+.task-form .task-repeat-ending label {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.task-repeat-ending input[type='radio'] {
+  width: 18px;
+  accent-color: var(--gold);
+}
+.task-repeat-ending input[type='number'] {
+  width: 85px;
+}
+.task-repeat-ending input[type='date'] {
+  width: min(180px, 100%);
+}
+.task-repeat-preview {
+  color: var(--gold);
+  font-size: 12px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.task-repeat-editor small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.task-repeat-badge {
+  display: inline-block;
+  padding: 4px 7px;
+  border: 1px solid #635238;
+  border-radius: 6px;
+  color: var(--gold);
+  font-size: 11px;
+}

@@ -24,10 +24,12 @@ export default function StepMaterials({
   documents,
   update,
   savedTask,
+  draftOnly = false,
 }: {
   documents: StepDocument[];
   update: (transform: (docs: StepDocument[]) => StepDocument[]) => boolean;
   savedTask: boolean;
+  draftOnly?: boolean;
 }) {
   const [editing, setEditing] = useState<string | null>(null),
     [name, setName] = useState(''),
@@ -40,8 +42,8 @@ export default function StepMaterials({
   const alive = useRef(true),
     input = useRef<HTMLInputElement>(null);
   const owner = workspaceUser();
-  const latest = useRef({ documents, update });
-  latest.current = { documents, update };
+  const latest = useRef({ documents, update, draftOnly });
+  latest.current = { documents, update, draftOnly };
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -104,7 +106,9 @@ export default function StepMaterials({
         );
       reset();
       setNotice(
-        'Đã thêm/cập nhật tài liệu. Checklist của Task đã tạo được lưu tự động; Task mới cần nhấn Thêm Task.',
+        latest.current.draftOnly
+          ? 'Đã cập nhật bản nháp tài liệu. Nhấn Lưu Task hoặc Thêm Task để lưu thay đổi.'
+          : 'Đã lưu tài liệu vào Task. Dữ liệu tài khoản sẽ được đồng bộ theo trạng thái trên trang.',
       );
     } catch (e) {
       if (uploaded) {

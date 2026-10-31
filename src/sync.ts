@@ -1,4 +1,6 @@
 import { mergeHabitDeletions } from './habits';
+import { mergeTaskTombstones } from './taskRecurrence';
+import { validTask, type Task } from './tasks';
 import {
   acknowledgeHabitDeletions,
   noteHabitSyncPhase,
@@ -54,22 +56,51 @@ export class WorkspaceSync {
       (data.payload !== null && !validWorkspace(data.payload))
     )
       throw Error('Dữ liệu máy chủ không hợp lệ hoặc khác phiên bản.');
+    if (
+      data.payload &&
+      [...data.payload.tasks.tasks, ...readWorkspace(this.id).tasks.tasks].some(
+        (t: Task) => t.repeat || t.repeatSeriesId || t.deletedAt !== undefined,
+      )
+    ) {
+      const markers = await this.client.rpc('lbd_read_task_deletions');
+      if (markers.error) {
+        if (!['PGRST202', '42883'].includes(markers.error.code))
+          throw markers.error;
+      } else {
+        if (
+          !Array.isArray(markers.data) ||
+          !markers.data.every((t) => validTask(t) && t.deletedAt !== undefined)
+        )
+          throw Error('Invalid server Task tombstones.');
+        data.payload.tasks.tasks = mergeTaskTombstones(
+          data.payload.tasks.tasks,
+          markers.data,
+        );
+      }
+    }
     if (!this.stopped)
       acknowledgeHabitDeletions(this.id, data.payload?.habits.habits ?? []);
     return data as { revision: number; payload: Workspace | null };
   }
   private retainRemoteDeletions(payload: Workspace | null) {
-    if (!payload?.habits.habits.some((h) => h.deletedAt !== undefined))
-      return false;
+    if (!payload) return false;
     const local = readWorkspace(this.id);
     const habits = mergeHabitDeletions(
       local.habits.habits,
       payload.habits.habits,
     );
-    if (JSON.stringify(habits) === JSON.stringify(local.habits.habits))
+    const tasks = mergeTaskTombstones(local.tasks.tasks, payload.tasks.tasks);
+    if (
+      JSON.stringify(habits) === JSON.stringify(local.habits.habits) &&
+      JSON.stringify(tasks) === JSON.stringify(local.tasks.tasks)
+    )
       return false;
     backupAccount(this.id, local);
-    storeWorkspace(this.id, { ...local, habits: { version: 1, habits } });
+    storeWorkspace(this.id, {
+      ...local,
+      habits: { version: 1, habits },
+      tasks: { version: 1, tasks },
+    });
     return true;
   }
   async start() {
@@ -176,7 +207,8 @@ export class WorkspaceSync {
         // A write/revision alone is not a server acknowledgement of this deletion.
         if (
           !stillDirty &&
-          snapshot.habits.habits.some((h) => h.deletedAt !== undefined)
+          (snapshot.habits.habits.some((h) => h.deletedAt !== undefined) ||
+            snapshot.tasks.tasks.some((t) => t.deletedAt !== undefined))
         ) {
           const readBack = await this.remote();
           if (this.stopped) return;
@@ -184,6 +216,14 @@ export class WorkspaceSync {
             (h) => h.deletedAt !== undefined,
           );
           if (
+            snapshot.tasks.tasks.some(
+              (t) =>
+                t.deletedAt !== undefined &&
+                !readBack.payload?.tasks.tasks.some(
+                  (server) =>
+                    server.id === t.id && server.deletedAt === t.deletedAt,
+                ),
+            ) ||
             expected.some(
               (h) =>
                 !readBack.payload?.habits.habits.some(
@@ -295,8 +335,19 @@ export class WorkspaceSync {
         local.habits.habits,
         remote.payload?.habits.habits ?? [],
       );
-      if (JSON.stringify(habits) !== JSON.stringify(local.habits.habits)) {
-        storeWorkspace(this.id, { ...local, habits: { version: 1, habits } });
+      const tasks = mergeTaskTombstones(
+        local.tasks.tasks,
+        remote.payload?.tasks.tasks ?? [],
+      );
+      if (
+        JSON.stringify(habits) !== JSON.stringify(local.habits.habits) ||
+        JSON.stringify(tasks) !== JSON.stringify(local.tasks.tasks)
+      ) {
+        storeWorkspace(this.id, {
+          ...local,
+          habits: { version: 1, habits },
+          tasks: { version: 1, tasks },
+        });
         this.notify(
           'pending',
           'Giữ dấu xóa vĩnh viễn từ máy chủ khi dùng bản thiết bị.',

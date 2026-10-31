@@ -230,6 +230,25 @@ docker(
     'utf8',
   ),
 );
+docker(
+  [
+    'exec',
+    '-i',
+    'lbd-auth-pg',
+    'psql',
+    '-U',
+    'postgres',
+    '-v',
+    'ON_ERROR_STOP=1',
+  ],
+  readFileSync(
+    new URL(
+      '../supabase/migrations/202610310002_task_repeat_deletions.sql',
+      import.meta.url,
+    ),
+    'utf8',
+  ),
+);
 docker([
   'run',
   '-d',

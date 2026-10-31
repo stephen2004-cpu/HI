@@ -61,6 +61,7 @@ export function projectTaskPeriod(
   const today = +dayStart(now),
     rows: TaskRow[] = [];
   for (const task of tasks) {
+    if (task.repeat || task.deletedAt !== undefined) continue;
     const h = task.habitId ? byHabit.get(task.habitId) : undefined;
     const blocks = (active.get(task.id) ?? []).sort(
       (a, b) => a.start - b.start,
@@ -80,7 +81,7 @@ export function projectTaskPeriod(
     let fallback: number | undefined,
       fallbackDateOnly = false;
     if (!blocks.length) {
-      const planned = task.plannedStart?.trim();
+      const planned = task.repeatDate ?? task.plannedStart?.trim();
       if (planned && validDate(planned)) {
         // Date-only legacy values represent a local day, never UTC midnight.
         fallback = +new Date(`${planned}T00:00:00`);

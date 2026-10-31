@@ -6,9 +6,11 @@ export default function TaskSetup({
   task,
   change,
   changeChecklist,
+  draftChecklist = false,
 }: {
   task: Omit<Task, 'id'> & { id?: string };
   change: (p: Partial<Task>) => void;
+  draftChecklist?: boolean;
   changeChecklist?: (steps: ChecklistStep[]) => boolean;
 }) {
   const timing = timingOf(task as Task),
@@ -120,6 +122,7 @@ export default function TaskSetup({
       <Checklist
         key={task.id ?? 'new-task'}
         task={task}
+        draftOnly={draftChecklist || !task.id}
         change={(patch, persist) => {
           if (
             persist &&
