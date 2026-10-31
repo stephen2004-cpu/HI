@@ -82,11 +82,19 @@ export function visibleTaskBlocks(
   return blocks.filter((b) => {
     if (b.cancelled) return false;
     const task = tasks.find((t) => t.id === b.taskId);
-    if (task?.deletedAt !== undefined) return false;
+    if (task?.deletedAt !== undefined || (b.automaticTaskId && !task))
+      return false;
     return !b.recurringTaskId || !task || visible.has(task.id);
   });
 }
 /** Pure, deterministic reconciliation. No network, no Timer writes, no implicit times. */
+export function hasTaskStart(task: Pick<Task, 'plannedStart'>) {
+  return (
+    !!task.plannedStart &&
+    /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d/.test(task.plannedStart) &&
+    Number.isFinite(+new Date(task.plannedStart))
+  );
+}
 export function scheduleTaskRepeats(
   tasks: Task[],
   planner: Planner,
@@ -94,6 +102,7 @@ export function scheduleTaskRepeats(
   to: Date,
   protectedIds = new Set<string>(),
   now = new Date(),
+  savedTaskId?: string,
 ) {
   let next = generateTaskRange(tasks, from, to, protectedIds, now);
   const roots = tasks.filter((t) => t.repeat && t.deletedAt === undefined);
@@ -210,7 +219,8 @@ export function scheduleTaskRepeats(
       if (
         existing.length !== 1 ||
         existing[0].id !== `task-block:${task.id}` ||
-        !existing[0].recurringTaskId ||
+        (!existing[0].recurringTaskId &&
+          existing[0].automaticTaskId !== task.id) ||
         existing[0].taskOverride ||
         existing[0].cancelled ||
         existing[0].start < +now ||
@@ -219,9 +229,16 @@ export function scheduleTaskRepeats(
       )
         continue;
       const b = existing[0];
-      if (b.start !== start || b.end !== end || b.title !== task.title) {
+      if (
+        b.start !== start ||
+        b.end !== end ||
+        b.title !== task.title ||
+        b.automaticTaskId
+      ) {
         blocks[blocks.findIndex((x) => x.id === b.id)] = {
           ...b,
+          automaticTaskId: undefined,
+          recurringTaskId: root.id,
           start,
           end,
           title: task.title,
@@ -241,9 +258,83 @@ export function scheduleTaskRepeats(
       added++;
     }
   }
+  // One-off Tasks are enrolled only by an explicit Task-form save. Do not
+  // bulk-convert legacy date hints or untouched Tasks when opening Calendar.
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (!b.automaticTaskId || b.cancelled) continue;
+    const task = next.find((t) => t.id === b.automaticTaskId);
+    if (
+      !task ||
+      task.deletedAt !== undefined ||
+      (task.id === savedTaskId &&
+        !hasTaskStart(task) &&
+        !b.taskOverride &&
+        !task.completed &&
+        !protectedIds.has(task.id))
+    ) {
+      blocks[i] = { ...b, cancelled: true };
+      cancelled++;
+    }
+  }
+  const single = next.find(
+    (t) =>
+      t.id === savedTaskId &&
+      !t.repeat &&
+      !t.repeatSeriesId &&
+      !t.habitId &&
+      t.deletedAt === undefined,
+  );
+  if (
+    single &&
+    hasTaskStart(single) &&
+    !single.completed &&
+    !protectedIds.has(single.id)
+  ) {
+    const schedule = scheduleOf(single)!;
+    const start = +new Date(single.plannedStart!),
+      end = start + schedule.minutes * 60000;
+    const existing = blocks.filter((b) => b.taskId === single.id);
+    if (!existing.length) {
+      blocks.push({
+        id: `task-block:${single.id}`,
+        automaticTaskId: single.id,
+        taskId: single.id,
+        title: single.title,
+        start,
+        end,
+        color: '',
+      });
+      added++;
+    } else if (
+      existing.length === 1 &&
+      existing[0].automaticTaskId === single.id &&
+      !existing[0].taskOverride
+    ) {
+      const b = existing[0];
+      if (
+        b.start !== start ||
+        b.end !== end ||
+        b.title !== single.title ||
+        b.cancelled
+      ) {
+        blocks[blocks.findIndex((x) => x.id === b.id)] = {
+          ...b,
+          start,
+          end,
+          title: single.title,
+          cancelled: false,
+        };
+        updated++;
+      }
+    }
+    // Manual/multiple blocks, including old duplicates, remain authoritative.
+  }
   const active = visibleTaskBlocks(blocks, next, protectedIds, now);
   const conflicts = new Set<string>();
-  for (const b of active.filter((b) => b.recurringTaskId && b.start >= +now)) {
+  for (const b of active.filter(
+    (b) => (b.recurringTaskId || b.automaticTaskId) && b.start >= +now,
+  )) {
     if (
       active.some(
         (other) =>

@@ -266,3 +266,160 @@ it('replaces future weekdays with exactly the finite number of valid blocks, ret
   tooLong[0].repeat!.rules[0].ending = { type: 'date', date: '2300-01-01' };
   expect(() => plan(tooLong)).toThrow('10.000');
 });
+
+const singleSave = (
+  task: Task,
+  planner = structuredClone(defaultPlanner),
+  savedId: string | undefined = task.id,
+  protectedIds = new Set<string>(),
+) => scheduleTaskRepeats([task], planner, from, to, protectedIds, now, savedId);
+it('one save schedules a one-off Task at its explicit time for its configured duration, without a second Task or duplicate block', () => {
+  const task = {
+    ...source,
+    plannedEndTime: undefined,
+    group: 'do' as const,
+    timing: {
+      mode: 'timer' as const,
+      focusMinutes: 60,
+      focusCount: 1,
+      breakMinutes: 0,
+    },
+  };
+  const a = singleSave(task);
+  expect(a.tasks).toEqual([task]);
+  expect(a.added).toBe(1);
+  const block = a.planner.blocks[0];
+  expect(block.taskId).toBe(task.id);
+  expect(block.start).toBe(+new Date(2026, 9, 31, 9));
+  expect(block.end).toBe(+new Date(2026, 9, 31, 10));
+  expect(singleSave(task, a.planner).planner).toEqual(a.planner);
+  expect(singleSave(task, a.planner, undefined).planner).toEqual(a.planner);
+  const changed = singleSave(
+    { ...task, plannedStart: '2026-11-01T11:00' },
+    a.planner,
+  );
+  expect(changed.planner.blocks).toHaveLength(1);
+  expect(new Date(changed.planner.blocks[0].start).getDate()).toBe(1);
+});
+it('a one-off Task without a clock stays unscheduled; viewing Calendar does not bulk-convert old date hints', () => {
+  const noTime = { ...source, plannedStart: undefined };
+  expect(singleSave(noTime).added).toBe(0);
+  expect(singleSave({ ...source, plannedStart: '2026-10-31' }).added).toBe(0);
+  expect(
+    scheduleTaskRepeats(
+      [source],
+      structuredClone(defaultPlanner),
+      from,
+      to,
+      new Set(),
+      now,
+    ).added,
+  ).toBe(0);
+});
+it('keeps legacy manual blocks and existing duplicates exactly as stored, and warns about new one-off conflicts', () => {
+  const custom = {
+    id: 'old',
+    taskId: source.id,
+    title: 'Old custom',
+    start: +new Date(2026, 9, 31, 12),
+    end: +new Date(2026, 9, 31, 13),
+    color: '#abcdef',
+  };
+  const planner = {
+    ...structuredClone(defaultPlanner),
+    blocks: [custom, { ...custom, id: 'older-duplicate' }],
+  };
+  const kept = singleSave(source, planner);
+  expect(kept.added).toBe(0);
+  expect(kept.planner).toEqual(planner);
+  const unrelated = {
+    ...custom,
+    taskId: 'other',
+    start: +new Date(2026, 9, 31, 9),
+    end: +new Date(2026, 9, 31, 10),
+  };
+  const conflict = singleSave(source, {
+    ...structuredClone(defaultPlanner),
+    blocks: [unrelated],
+  });
+  expect(conflict.conflicts).toBe(1);
+  expect(conflict.planner.blocks[0]).toEqual(unrelated);
+});
+it('preserves one-off Calendar edits and explicit deletion; clearing Task time can safely unschedule an automatic block and later reschedule it', () => {
+  const a = singleSave(source);
+  const moved = applyCalendarEdit(a.planner, a.planner.blocks, {
+    ...a.planner,
+    blocks: a.planner.blocks.map((b) => ({
+      ...b,
+      start: b.start + 3600000,
+      end: b.end + 3600000,
+    })),
+  });
+  expect(moved.blocks[0].taskOverride).toBe(true);
+  expect(singleSave(source, moved).planner).toEqual(moved);
+  const deleted = applyCalendarEdit(a.planner, a.planner.blocks, {
+    ...a.planner,
+    blocks: [],
+  });
+  expect(deleted.blocks[0].cancelled).toBe(true);
+  expect(singleSave(source, deleted).added).toBe(0);
+  expect(singleSave(source, deleted).planner).toEqual(deleted);
+  const cleared = singleSave({ ...source, plannedStart: undefined }, a.planner);
+  expect(cleared.planner.blocks[0].cancelled).toBe(true);
+  const resumed = singleSave(source, cleared.planner);
+  expect(resumed.planner.blocks).toHaveLength(1);
+  expect(resumed.planner.blocks[0].cancelled).toBe(false);
+});
+it('does not schedule completed/focused one-off history; removing a Task cancels its automatic block without erasing the stored record', () => {
+  expect(singleSave({ ...source, completed: true }).added).toBe(0);
+  expect(
+    singleSave(
+      source,
+      structuredClone(defaultPlanner),
+      source.id,
+      new Set([source.id]),
+    ).added,
+  ).toBe(0);
+  const a = singleSave(source),
+    removed = scheduleTaskRepeats([], a.planner, from, to, new Set(), now);
+  expect(removed.planner.blocks).toHaveLength(1);
+  expect(removed.planner.blocks[0].cancelled).toBe(true);
+  expect(visibleTaskBlocks(removed.planner.blocks, [])).toEqual([]);
+});
+
+it('converts a future automatic one-off block to the first repeat date without duplicates, while preserving a manual override', () => {
+  const a = singleSave(source),
+    task = { ...source, repeatSchedule: scheduleOf(source) };
+  const { root, instance } = createTaskRepeat(task, settings);
+  const result = scheduleTaskRepeats(
+    [root, instance],
+    a.planner,
+    from,
+    to,
+    new Set(),
+    now,
+    task.id,
+  );
+  expect(result.planner.blocks).toHaveLength(4);
+  expect(result.planner.blocks.map((b) => new Date(b.start).getDate())).toEqual(
+    [3, 6, 10, 13],
+  );
+  expect(result.planner.blocks[0].id).toBe(a.planner.blocks[0].id);
+  expect(result.planner.blocks[0].recurringTaskId).toBe(root.id);
+  expect(result.planner.blocks[0].automaticTaskId).toBeUndefined();
+  const manual = {
+    ...a.planner,
+    blocks: a.planner.blocks.map((b) => ({ ...b, taskOverride: true })),
+  };
+  const kept = scheduleTaskRepeats(
+    [root, instance],
+    manual,
+    from,
+    to,
+    new Set(),
+    now,
+    task.id,
+  );
+  expect(kept.planner.blocks).toHaveLength(4);
+  expect(kept.planner.blocks[0]).toEqual(manual.blocks[0]);
+});

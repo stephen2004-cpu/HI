@@ -162,3 +162,102 @@ test('timed Task repeats create and synchronize four blocks on desktop/mobile, p
   await phone.close();
   await a.auth.signOut();
 });
+
+test('one-off save atomically syncs Eisenhower and Calendar across desktop/mobile, preserves a manual Calendar edit and reloads without duplicates', async ({
+  browser,
+}) => {
+  const a = createClient(cfg.url, cfg.key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    }),
+    email = `one-off-${randomUUID()}@example.com`,
+    password = `Lbd-${randomUUID()}!`;
+  const signup = await a.auth.signUp({ email, password });
+  expect(signup.error).toBeNull();
+  const user = signup.data.user!.id;
+  const desktop = await browser.newContext(),
+    phone = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    });
+  const p = await desktop.newPage(),
+    q = await phone.newPage();
+  await login(p, email, password, user);
+  await p.getByLabel('Tên công việc', { exact: true }).fill('Học VNR một lần');
+  await p
+    .getByRole('combobox', { name: 'Nhóm ưu tiên', exact: true })
+    .selectOption('do');
+  await p.getByLabel('Phút mỗi phiên Focus', { exact: true }).fill('60');
+  await p
+    .getByLabel('Ngày giờ dự kiến', { exact: true })
+    .fill('2026-10-31T09:00');
+  await p.getByRole('button', { name: 'Thêm Task', exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (await a.rpc('lbd_read_workspace')).data?.payload?.planner.blocks
+          .length,
+      { timeout: 15000 },
+    )
+    .toBe(1);
+  const server = (await a.rpc('lbd_read_workspace')).data.payload;
+  expect(server.tasks.tasks).toHaveLength(1);
+  expect(server.tasks.tasks[0].group).toBe('do');
+  expect(server.planner.blocks[0].taskId).toBe(server.tasks.tasks[0].id);
+  await login(q, email, password, user);
+  await expect.poll(() => local(q, user)).toEqual(server.planner.blocks);
+  await expect(
+    q
+      .getByRole('region', { name: 'Làm ngay', exact: true })
+      .getByRole('checkbox', { name: 'Học VNR một lần', exact: true }),
+  ).toBeVisible();
+  await q.getByRole('button', { name: 'Sửa', exact: true }).click();
+  await q
+    .getByLabel('Ngày giờ dự kiến', { exact: true })
+    .fill('2026-10-31T11:00');
+  await q.getByRole('button', { name: 'Lưu Task', exact: true }).click();
+  await expect
+    .poll(async () => new Date((await local(p, user))[0].start).getHours(), {
+      timeout: 15000,
+    })
+    .toBe(11);
+  await q.goto('/#Lịch');
+  await q
+    .getByRole('button', { name: 'Sửa lịch Học VNR một lần', exact: true })
+    .click();
+  const dialog = q.getByRole('dialog');
+  await dialog.getByLabel('Bắt đầu', { exact: true }).fill('2026-10-31T13:00');
+  await dialog.getByLabel('Kết thúc', { exact: true }).fill('2026-10-31T14:30');
+  await dialog
+    .getByRole('button', { name: 'Lưu Time Block', exact: true })
+    .click();
+  await expect
+    .poll(async () => new Date((await local(p, user))[0].start).getHours(), {
+      timeout: 15000,
+    })
+    .toBe(13);
+  const manual = await local(p, user);
+  expect(manual[0].taskOverride).toBe(true);
+  await p.goto('/#Task');
+  await p.getByRole('button', { name: 'Sửa', exact: true }).click();
+  await p
+    .getByLabel('Tên công việc', { exact: true })
+    .fill('Đổi tên, giữ lịch chỉnh tay');
+  await p.getByRole('button', { name: 'Lưu Task', exact: true }).click();
+  await expect(p.locator('.sync-status')).toHaveClass(/synced/, {
+    timeout: 15000,
+  });
+  expect(await local(p, user)).toEqual(manual);
+  await p.reload();
+  await q.reload();
+  await expect.poll(() => local(q, user)).toEqual(manual);
+  await expect.poll(() => local(p, user)).toEqual(manual);
+  const final = (await a.rpc('lbd_read_workspace')).data.payload;
+  expect(final.tasks.tasks).toHaveLength(1);
+  expect(final.tasks.tasks[0].title).toBe('Đổi tên, giữ lịch chỉnh tay');
+  expect(final.planner.blocks).toHaveLength(1);
+  expect(final.planner.blocks).toEqual(manual);
+  await desktop.close();
+  await phone.close();
+  await a.auth.signOut();
+});

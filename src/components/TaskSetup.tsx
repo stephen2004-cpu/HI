@@ -8,11 +8,13 @@ export default function TaskSetup({
   changeChecklist,
   draftChecklist = false,
   recurring = false,
+  autoSchedule = false,
 }: {
   task: Omit<Task, 'id'> & { id?: string };
   change: (p: Partial<Task>) => void;
   draftChecklist?: boolean;
   recurring?: boolean;
+  autoSchedule?: boolean;
   changeChecklist?: (steps: ChecklistStep[]) => boolean;
 }) {
   const timing = timingOf(task as Task),
@@ -143,7 +145,9 @@ export default function TaskSetup({
         {duration(plan.rest)} · Calendar cần: {duration(plan.total)}. Ngày giờ
         {recurring
           ? 'dự kiến và giờ kết thúc được dùng để tự lên lịch các lần Task lặp.'
-          : 'dự kiến dùng làm gợi ý khi lên lịch, không tự tạo block.'}
+          : autoSchedule
+            ? 'dự kiến sẽ tự tạo Time Block khi lưu Task; để trống để lưu vào Chưa lên lịch.'
+            : 'dự kiến dùng làm gợi ý khi lên lịch, không tự tạo block.'}
       </p>
       <Checklist
         key={task.id ?? 'new-task'}

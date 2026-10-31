@@ -156,12 +156,20 @@ export function applyCalendarEdit(
   const hidden = stored.blocks.filter((b) => !visibleIds.has(b.id));
   const cancelled = visible
     .filter(
-      (b) => (b.recurringHabitId || b.recurringTaskId) && !nextIds.has(b.id),
+      (b) =>
+        (b.recurringHabitId || b.recurringTaskId || b.automaticTaskId) &&
+        !nextIds.has(b.id),
     )
-    .map((b) => ({ ...b, cancelled: true }));
+    .map((b) => ({
+      ...b,
+      cancelled: true,
+      ...(b.automaticTaskId ? { taskOverride: true } : {}),
+    }));
   const edited = next.blocks.map((b) => {
     const old = stored.blocks.find((x) => x.id === b.id);
-    return (old?.recurringHabitId || old?.recurringTaskId) &&
+    return (old?.recurringHabitId ||
+      old?.recurringTaskId ||
+      old?.automaticTaskId) &&
       (old.start !== b.start ||
         old.end !== b.end ||
         old.color !== b.color ||
@@ -169,7 +177,9 @@ export function applyCalendarEdit(
       ? {
           ...b,
           ...(old?.recurringHabitId ? { habitOverride: true } : {}),
-          ...(old?.recurringTaskId ? { taskOverride: true } : {}),
+          ...(old?.recurringTaskId || old?.automaticTaskId
+            ? { taskOverride: true }
+            : {}),
         }
       : b;
   });

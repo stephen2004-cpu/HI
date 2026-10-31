@@ -1,5 +1,6 @@
 import {
   scheduleOf,
+  hasTaskStart,
   repeatDraft,
   scheduleTaskRepeats,
   persistTaskCalendar,
@@ -222,6 +223,8 @@ export default function TaskBoard({
         range.from,
         range.to,
         taskProtectedIds(),
+        new Date(),
+        task.id,
       );
       next = scheduled.tasks;
       if (!persistTaskCalendar(next, scheduled.planner))
@@ -231,13 +234,19 @@ export default function TaskBoard({
       setTasks(readTasks().tasks);
       setError('');
       setNotice(
-        `Đã lưu Task. ${scheduled.added ? `Đã lên lịch ${scheduled.added} lần. ` : ''}${scheduled.updated ? `Đã cập nhật ${scheduled.updated} lịch tương lai. ` : ''}${scheduled.conflicts ? `Cảnh báo: ${scheduled.conflicts} lần trùng lịch; các block khác được giữ nguyên. ` : ''}${repeat.mode === 'weekly' && !task.repeatSchedule ? 'Chọn ngày giờ dự kiến để tự tạo Time Block.' : ''}`,
+        `Đã lưu Task. ${scheduled.added ? `Đã lên lịch ${scheduled.added} lần. ` : ''}${scheduled.updated ? `Đã cập nhật ${scheduled.updated} lịch tương lai. ` : ''}${scheduled.conflicts ? `Cảnh báo: ${scheduled.conflicts} lần trùng lịch; các block khác được giữ nguyên. ` : ''}${!hasTaskStart(task) && !task.repeatSchedule ? 'Chọn ngày giờ dự kiến để tự tạo Time Block. Task chưa có giờ vẫn được giữ trong danh sách chưa lên lịch.' : ''}`,
       );
       setEditing(null);
       setDraft(empty);
       setRepeat(defaultTaskRepeat());
       setEditScope('single');
       if (createdDate) setDate(createdDate);
+      else if (!editing && hasTaskStart(task))
+        setDate(task.plannedStart!.slice(0, 10));
+      if (!editing) {
+        setStatus('all');
+        setCollapsed((previous) => ({ ...previous, [task.group]: false }));
+      }
       onRange(range.from, range.to);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Không lưu được Task.');
@@ -788,6 +797,7 @@ export default function TaskBoard({
         )}
         <TaskSetup
           key={editing ?? 'new-task'}
+          autoSchedule
           recurring={repeat.mode === 'weekly' || !!editingTask?.repeatSeriesId}
           task={{ ...draft, id: editing ?? undefined }}
           change={(patch) =>
