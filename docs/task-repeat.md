@@ -4,13 +4,13 @@
 
 Trong Tạo/Chỉnh sửa Task, **Không lặp** là mặc định. Chọn **Chọn ngày trong tuần**, ngày bắt đầu và các ngày T2–CN (có thể chọn cả 7), rồi chọn không giới hạn, sau N lần hoặc đến ngày cụ thể (bao gồm ngày kết thúc). Bản xem trước hiển thị các ngày tiếp theo. Ngày bắt đầu không khớp thứ đã chọn thì lần đầu là ngày phù hợp kế tiếp. Ngày bỏ lỡ vẫn tiêu thụ giới hạn; Timer không tự hoàn thành Task.
 
-Mỗi ngày có Task riêng với completion/Checklist/Actual Output riêng. Checklist và metadata tài liệu được sao chép; không nhân bản file nhị phân hoặc đưa file vào LocalStorage. File giữ đường dẫn Storage và quyền tài khoản hiện có. Khi bật lặp trên Task cũ, giữ ID, tiến độ và tài liệu của lần gốc; các lần mới bắt đầu chưa hoàn thành. Calendar và Focus hiển thị ngày cạnh tên để phân biệt các lần. Thiết lập lặp **không tạo Time Block**: cần bấm Mở Calendar hoặc kéo Task như trước.
+Mỗi ngày có Task riêng với completion/Checklist/Actual Output riêng. Checklist và metadata tài liệu được sao chép; không nhân bản file nhị phân hoặc đưa file vào LocalStorage. File giữ đường dẫn Storage và quyền tài khoản hiện có. Khi bật lặp trên Task cũ, giữ ID, tiến độ và tài liệu của lần gốc; các lần mới bắt đầu chưa hoàn thành. Calendar và Focus hiển thị ngày cạnh tên để phân biệt các lần. Task lặp có **Ngày giờ dự kiến** sẽ tự tạo Time Block. Nhập **Giờ kết thúc Task lặp** để chọn khung giờ cụ thể; nếu để trống, dùng tổng thời lượng Focus + nghỉ hiện có (không sửa Timer). Chưa có giờ bắt đầu thì không đoán giờ, không tạo block và hiển thị nhắc thiết lập giờ. Task không lặp giữ cách lên lịch thủ công.
 
 Sửa một lần chỉ thay lần đó. **Các lần tương lai** tạo phiên bản quy tắc mới từ ngày tương lai đã chọn, hoặc ngày mai nếu chọn hôm nay/quá khứ; không viết lại hôm nay, lịch sử, lần đã hoàn thành, đã có Focus hoặc đã chỉnh riêng. Checklist/tài liệu trong biểu mẫu sửa tương lai là bản nháp đến khi bấm Lưu Task. Tắt lặp trong phạm vi tương lai ngừng các lần mới, giữ lịch sử. Giới hạn N là tổng số lần đã lên lịch của chuỗi qua các phiên bản; tăng từ 5 lên 10 cho phép tối đa tổng 10 lần. Quy tắc ngày mới có hiệu lực từ ngày hiển thị. Các lần cũ có tiến độ vẫn được giữ dù không còn nằm trong quy tắc mới.
 
 ## Dữ liệu và giới hạn
 
-Quy tắc và template lưu trong JSON Task hiện có, không đổi bảng Task hoặc phiên bản LocalStorage. Bản ghi gốc của chuỗi được ẩn khỏi UI; các lần có `repeatSeriesId`, `repeatDate`, ID ổn định. Sinh dữ liệu theo khoảng đang xem (tối đa 62 ngày mỗi yêu cầu), không tạo vô hạn ngay lúc lưu. Preview tối đa 6 ngày trong 370 ngày tìm kiếm. Bản sao lưu JSON bao gồm template, các phiên bản quy tắc, lần xuất hiện và dấu xóa. Không xóa LocalStorage V1.
+Quy tắc và template lưu trong JSON Task hiện có, không đổi bảng Task hoặc phiên bản LocalStorage. Bản ghi gốc của chuỗi được ẩn khỏi UI; các lần có `repeatSeriesId`, `repeatDate`, ID ổn định. Chuỗi hữu hạn có giờ được sinh đầy đủ ngay lúc lưu, kể cả ngoài tuần đang xem, theo các khoảng tối đa 61 ngày. Chuỗi không giới hạn chỉ sinh theo khoảng đang xem (tối đa 62 ngày), không tạo vô hạn ngay lúc lưu. Giới hạn bảo vệ: tối đa 10.000 lần/chuỗi hữu hạn và khoảng ngày tối đa 366.000 ngày; vượt giới hạn thì báo lỗi trước khi ghi dữ liệu. Preview tối đa 6 ngày trong 370 ngày tìm kiếm. Bản sao lưu JSON bao gồm template, các phiên bản quy tắc, lần xuất hiện và dấu xóa. Không xóa LocalStorage V1.
 
 Xóa trong UI là **xóa riêng lần đang chọn**; các lần khác tiếp tục. Dấu `deletedAt` ngăn sinh lại ngày đó. Đây không phải cam kết xóa vật lý hoàn toàn dữ liệu cá nhân. Với tài khoản, phải có RPC/migration bảo vệ dưới đây trước khi cho phép xóa lần Task lặp. Khi thiếu RPC, app báo “Chưa xóa Task” và không tạo dấu xóa giả. Tạo/sửa/lặp vẫn dùng JSON Task hiện có. Guest dùng dấu xóa trên thiết bị; không có đồng bộ tài khoản khi ở chế độ khách.
 
@@ -42,11 +42,11 @@ Task ledger độc lập với Habit installer: đã kiểm thử cài Task trư
 
 ## Kiểm thử và phạm vi xác nhận
 
-Unit: số lần 5/10/20, mọi thứ trong tuần, ngày lệch, ngày kết thúc, sửa tương lai, dữ liệu cũ/tài liệu, không trùng và dấu xóa. Playwright: desktop/mobile Chromium, form, tiến độ từng lần, sửa riêng/tương lai, draft tài liệu, reload và không tự tạo block. Integration: backend Auth/PostgREST/Postgres **cục bộ**, hai browser context, offline/reconnect, thiếu RPC, xóa/đọc lại/legacy snapshot, RLS tài khoản. SQL tests dùng database tạm kiểm tra rollback, preconditions và tương thích Habit installer.
+Unit: số lần 5/10/20, mọi thứ trong tuần, ngày lệch, ngày kết thúc, sửa tương lai, dữ liệu cũ/tài liệu, không trùng và dấu xóa. Playwright: desktop/mobile Chromium, form, tiến độ từng lần, sửa riêng/tương lai, draft tài liệu, reload, không tự tạo block khi thiếu giờ và tự lên lịch khi có giờ. Integration: backend Auth/PostgREST/Postgres **cục bộ**, hai browser context, offline/reconnect, thiếu RPC, xóa/đọc lại/legacy snapshot, RLS tài khoản. SQL tests dùng database tạm kiểm tra rollback, preconditions và tương thích Habit installer.
 
 Không đồng nhất mô phỏng mobile Chromium với iPhone/Safari thật; không chứng minh đồng bộ trên Supabase thật khi chưa cài và thử migration ở đó. Không thay main, logo, hướng dẫn sử dụng hoặc Production.
 
-## Kết quả lần triển khai này
+## Kết quả phiên bản Task lặp ban đầu (trước tự lên lịch)
 
 - `npm run build`: đạt (còn cảnh báo bundle trên 500 kB, không phải lỗi build).
 - `npm test`: 16 file, **97/97** bài đạt.
@@ -57,3 +57,25 @@ Không đồng nhất mô phỏng mobile Chromium với iPhone/Safari thật; kh
 - Xem ảnh điều khiển thực tế: [Desktop](ui-preview/task-repeat-desktop.png), [Mobile](ui-preview/task-repeat-mobile.png); không thấy tràn ngang tại 1440px/390px.
 
 Chưa kiểm thử trên iPhone/Safari thật hoặc Supabase project thật. Chưa áp dụng migration, chưa thử xóa GYM thật. Không xác nhận Vercel Preview mới đã build nếu chưa có kết quả deployment của Vercel.
+
+
+## Bổ sung tự lên lịch Time Block
+
+Ví dụ đã kiểm thử: bắt đầu 31/10/2026, T3/T6, 4 lần, 09:00–11:15 → đúng 03, 06, 10, 13/11/2026. Không cần dấu +; số lần đã bỏ lỡ vẫn tính trong giới hạn. Sửa riêng thay đúng một block tự động; sửa tương lai cập nhật các block tự động đủ điều kiện, giữ quá khứ, Task hoàn thành/đã Focus và block đã kéo/resize/chỉnh riêng. Tắt lặp hủy các block tự động tương lai; dấu hủy được lưu để không tự tạo lại. Xóa một lần Task giữ tombstone và loại block liên quan khỏi lịch.
+
+Thời gian và metadata nguồn lặp lưu trong JSON Task/Time Block hiện có (`repeatSchedule`, `plannedEndTime`, `recurringTaskId`, `taskOverride`), không đổi schema Supabase và không áp dụng SQL thật. ID block ổn định theo ID Task; nếu Task đã có bất kỳ block thủ công hoặc block hủy, không tạo thêm block tự động. Chỉnh Calendar vẫn giữ nguyên thao tác kéo/resize. Các block trùng lịch được giữ và hiển thị cảnh báo, không ghi đè block khác.
+
+Task lặp cũ: nếu lần gốc đã có ngày giờ dự kiến, dùng giờ đó và thời lượng Focus/nghỉ đã lưu để lên lịch các lần còn thiếu. Không suy đoán giờ từ một block đã kéo riêng; không ghi đè block thủ công, block có nhiều lịch hoặc block đã hủy. Nếu trước đây chỉ chọn thứ, mở Chỉnh sửa → Các lần tương lai → chọn ngày giờ dự kiến/giờ kết thúc → Lưu Task. Lần đã hoàn thành hoặc đã Focus được giữ nguyên.
+
+Task và Calendar được ghi cùng lượt đồng bộ; nếu ghi Planner lỗi, phục hồi JSON Task trước thao tác và không báo thành công. Dữ liệu LocalStorage V1 không bị thay đổi. Việc xóa Task lặp tài khoản vẫn yêu cầu RPC bảo vệ đã mô tả ở trên; bản bổ sung này không bỏ qua RPC và không tự cài migration.
+
+### Kiểm chứng bản tự lên lịch
+
+- Build đạt; còn cảnh báo bundle lớn hơn 500 kB của Vite.
+- Unit **106/106** (17 file): lịch 4 lần, ngày kết thúc, không giới hạn, đổi thứ tương lai, completion riêng, lịch cũ, xóa/dừng, chống trùng, trùng lịch, lỗi lưu Planner và thời lượng Focus qua đêm.
+- Toàn bộ Playwright desktop/mobile Chromium **96/96**; chạy lại riêng **6/6** bài tự lên lịch sau rà soát cuối.
+- Toàn bộ integration trên Auth/PostgREST/Postgres cục bộ **19/19**; bài mới tạo 4 block qua UI, đồng bộ hai context desktop/mobile, sửa một lần, xóa và reload; chạy lại riêng bài này sau rà soát cuối.
+- Không thay đổi/chạy migration trên Supabase thật; không sửa cấu hình Auth. Chưa kiểm thử iPhone/Safari hoặc project Supabase thật. Các thử nghiệm đồng bộ trên đây là backend cục bộ, không phải xác nhận trên tài khoản thật của người dùng.
+- Ảnh render thực tế ví dụ Học VNR: [Desktop](ui-preview/task-auto-calendar-desktop.png), [Mobile](ui-preview/task-auto-calendar-mobile.png). Không tràn ngang ở 1440px/390px. Calendar không được thiết kế lại.
+
+Ô giờ kết thúc là giờ trong cùng ngày, phải sau giờ bắt đầu. Nếu để trống, thời lượng Focus/nghỉ hiện có vẫn được dùng, kể cả khi kéo dài sang ngày sau. Chỉ một số nguyên dương hữu hạn trong giới hạn bảo vệ được vật chất hóa toàn bộ; không giới hạn vẫn sinh theo khoảng hiển thị. Nếu Supabase thật chưa có RPC bảo vệ xóa Task lặp của phiên bản trước, thao tác xóa tài khoản vẫn bị chặn an toàn; tự lên lịch không cần migration mới.

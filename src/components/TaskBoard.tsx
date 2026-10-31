@@ -1,3 +1,10 @@
+import {
+  scheduleOf,
+  repeatDraft,
+  scheduleTaskRepeats,
+  persistTaskCalendar,
+} from '../taskScheduling';
+import { loadPlanner } from '../planner';
 import TaskSetup from './TaskSetup';
 import TaskRepeatEditor from './TaskRepeatEditor';
 import { supabase } from '../supabase';
@@ -7,7 +14,6 @@ import {
   futureTaskEffectiveDate,
   createTaskRepeat,
   editFutureTaskRepeat,
-  generateTaskRange,
   repeatSettings,
   type TaskRepeatSettings,
 } from '../taskRecurrence';
@@ -178,6 +184,8 @@ export default function TaskBoard({
       id: editing ?? crypto.randomUUID(),
     };
     try {
+      if (repeat.mode === 'weekly' || original?.repeatSeriesId)
+        task.repeatSchedule = scheduleOf(task);
       let next: Task[];
       let createdDate: string | undefined;
       if (original?.repeatSeriesId) {
@@ -205,14 +213,26 @@ export default function TaskBoard({
         next = editing
           ? stored.tasks.map((t) => (t.id === editing ? task : t))
           : [...stored.tasks, task];
-      next = generateTaskRange(next, range.from, range.to, taskProtectedIds());
-      if (!writeTaskStore(next))
+      const latestPlanner = loadPlanner();
+      if (latestPlanner.error)
+        throw Error('Không đọc được Calendar. Chưa lưu Task.');
+      const scheduled = scheduleTaskRepeats(
+        next,
+        latestPlanner.data,
+        range.from,
+        range.to,
+        taskProtectedIds(),
+      );
+      next = scheduled.tasks;
+      if (!persistTaskCalendar(next, scheduled.planner))
         throw Error(
           'Không lưu được Task. Nội dung nhập được giữ lại để thử lại.',
         );
       setTasks(readTasks().tasks);
       setError('');
-      setNotice('Đã lưu Task và quy tắc lặp. Không tự tạo Time Block.');
+      setNotice(
+        `Đã lưu Task. ${scheduled.added ? `Đã lên lịch ${scheduled.added} lần. ` : ''}${scheduled.updated ? `Đã cập nhật ${scheduled.updated} lịch tương lai. ` : ''}${scheduled.conflicts ? `Cảnh báo: ${scheduled.conflicts} lần trùng lịch; các block khác được giữ nguyên. ` : ''}${repeat.mode === 'weekly' && !task.repeatSchedule ? 'Chọn ngày giờ dự kiến để tự tạo Time Block.' : ''}`,
+      );
       setEditing(null);
       setDraft(empty);
       setRepeat(defaultTaskRepeat());
@@ -348,7 +368,7 @@ export default function TaskBoard({
             disabled={loaded.error}
             onClick={() => {
               setEditing(t.id);
-              setDraft({ ...t });
+              setDraft(repeatDraft(t));
               const root = readTaskStore().tasks.find(
                 (x) => x.id === t.repeatSeriesId,
               );
@@ -435,7 +455,17 @@ export default function TaskBoard({
                         x.id === t.id ? { ...x, deletedAt: Date.now() } : x,
                       )
                     : latest.tasks.filter((x) => x.id !== t.id);
-                  if (!writeTaskStore(next))
+                  const currentPlanner = loadPlanner();
+                  if (currentPlanner.error)
+                    throw Error('Không đọc được lịch. Chưa xóa.');
+                  const scheduled = scheduleTaskRepeats(
+                    next,
+                    currentPlanner.data,
+                    range.from,
+                    range.to,
+                    taskProtectedIds(),
+                  );
+                  if (!persistTaskCalendar(scheduled.tasks, scheduled.planner))
                     throw Error(
                       'Không lưu được thao tác xóa. Dữ liệu cũ được giữ.',
                     );
@@ -758,6 +788,7 @@ export default function TaskBoard({
         )}
         <TaskSetup
           key={editing ?? 'new-task'}
+          recurring={repeat.mode === 'weekly' || !!editingTask?.repeatSeriesId}
           task={{ ...draft, id: editing ?? undefined }}
           change={(patch) =>
             setDraft((previous) => ({ ...previous, ...patch }))

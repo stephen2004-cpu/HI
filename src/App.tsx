@@ -1,3 +1,8 @@
+import {
+  scheduleTaskRepeats,
+  persistTaskCalendar,
+  visibleTaskBlocks,
+} from './taskScheduling';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -55,7 +60,6 @@ import {
 } from './tasks';
 import FocusDetails from './components/FocusDetails';
 import HabitTracker from './components/HabitTracker';
-import { generateTaskRange } from './taskRecurrence';
 import UserGuide from './components/UserGuide';
 import { validDate, loadHabits, habitOccurrence, type Habit } from './habits';
 import {
@@ -155,6 +159,14 @@ export default function App() {
     };
     window.addEventListener('hashchange', change);
     return () => window.removeEventListener('hashchange', change);
+  }, []);
+  useEffect(() => {
+    const refresh = () => {
+      const latest = loadPlanner();
+      if (!latest.error) setPlanner(latest.data);
+    };
+    window.addEventListener('lbd-planner-updated', refresh);
+    return () => window.removeEventListener('lbd-planner-updated', refresh);
   }, []);
   const updatePlanner = (next: Planner) => {
     if (plannerState.error) return false;
@@ -317,7 +329,7 @@ export default function App() {
   taskState.tasks
     .filter((t) => t.completed)
     .forEach((t) => protectedTaskIds.add(t.id));
-  const displayBlocks = habitState.error
+  const habitDisplayBlocks = habitState.error
     ? planner.blocks.filter((b) => !b.cancelled)
     : visibleHabitBlocks(
         planner.blocks,
@@ -325,18 +337,43 @@ export default function App() {
         protectedTaskIds,
         now,
       );
+  const displayBlocks = visibleTaskBlocks(
+    habitDisplayBlocks,
+    readTaskStore().tasks,
+    protectedTaskIds,
+    new Date(now),
+  );
   const displayPlanner = { ...planner, blocks: displayBlocks };
   const ensureHabitRange = (from: Date, to: Date) => {
     const stored = readTaskStore();
     if (stored.error) return;
-    const repeated = generateTaskRange(
-      stored.tasks,
-      from,
-      to,
-      taskProtectedIds(),
-    );
-    if (repeated !== stored.tasks && !writeTaskStore(repeated)) {
-      setPlannerError('Không lưu được các lần Task lặp. Dữ liệu cũ được giữ.');
+    const currentPlanner = loadPlanner();
+    if (currentPlanner.error) return;
+    let scheduled;
+    try {
+      scheduled = scheduleTaskRepeats(
+        stored.tasks,
+        currentPlanner.data,
+        from,
+        to,
+        taskProtectedIds(),
+      );
+      if (
+        (scheduled.tasks !== stored.tasks ||
+          scheduled.planner !== currentPlanner.data) &&
+        !persistTaskCalendar(scheduled.tasks, scheduled.planner)
+      ) {
+        setPlannerError('Không lưu được Task và lịch lặp. Hãy thử lại.');
+        return;
+      }
+      if (scheduled.conflicts)
+        setNotice(
+          `Cảnh báo: ${scheduled.conflicts} lần Task lặp trùng lịch; không thay đổi các block khác.`,
+        );
+    } catch (error) {
+      setPlannerError(
+        error instanceof Error ? error.message : 'Không tạo được lịch lặp.',
+      );
       return;
     }
     const habits = loadHabits(),
@@ -344,7 +381,7 @@ export default function App() {
     if (habits.error || tasks.error || plannerState.error) return;
     const result = generateHabitRange(
       habits.habits,
-      planner,
+      scheduled.planner,
       tasks.tasks,
       from,
       to,

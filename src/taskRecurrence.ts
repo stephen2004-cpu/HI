@@ -11,6 +11,8 @@ export type TaskTemplate = Pick<
   | 'checklist'
   | 'expectedOutput'
   | 'timing'
+  | 'repeatSchedule'
+  | 'plannedEndTime'
 >;
 export type TaskRepeatRule = {
   id: string;
@@ -43,6 +45,8 @@ const templateKeys = [
   'checklist',
   'expectedOutput',
   'timing',
+  'repeatSchedule',
+  'plannedEndTime',
 ];
 export function taskTemplate(task: Task): TaskTemplate {
   const value = Object.fromEntries(
@@ -192,6 +196,9 @@ export function createTaskRepeat(task: Task, settings: TaskRepeatSettings) {
     ...task,
     repeatSeriesId: root.id,
     repeatDate: first,
+    ...(task.repeatSchedule && task.plannedStart
+      ? { plannedStart: `${first}T${task.repeatSchedule.time}` }
+      : {}),
     repeatOverride: true,
   };
   return { root, instance };
@@ -239,6 +246,7 @@ export function generateTaskRange(
   to: Date,
   protectedIds = new Set<string>(),
   now = new Date(),
+  seriesIds?: Set<string>,
 ) {
   if (
     !Number.isFinite(+from) ||
@@ -250,7 +258,12 @@ export function generateTaskRange(
   const next = [...tasks];
   let changed = false;
   const today = localDate(now);
-  for (const root of tasks.filter((t) => t.repeat && t.deletedAt === undefined))
+  for (const root of tasks.filter(
+    (t) =>
+      t.repeat &&
+      t.deletedAt === undefined &&
+      (!seriesIds || seriesIds.has(t.id)),
+  ))
     for (let day = dayStart(from); +day < +to; day = addDays(day, 1)) {
       const date = localDate(day);
       if (!taskRepeatsOn(root.repeat!, date)) continue;
@@ -342,7 +355,10 @@ export function editFutureTaskRepeat(
             id: instance.id,
             repeatSeriesId: root.id,
             repeatDate: instance.repeatDate,
-            repeatOverride: true,
+            repeatOverride: taskRepeatsOn(
+              updated.repeat,
+              instance.repeatDate ?? effective,
+            ),
           }
         : t,
   );

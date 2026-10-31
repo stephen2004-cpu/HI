@@ -204,10 +204,11 @@ export default function TaskRepeatEditor({
         </p>
       )}
       <small>
-        Chỉ tạo các lần Task, không tự tạo Time Block. Ngày bỏ lỡ vẫn tính một
-        lần. Mỗi lần có trạng thái riêng; Checklist và tài liệu được sao chép
-        độc lập. Khi sửa tương lai, giữ các lần đã hoàn thành, có Focus hoặc đã
-        chỉnh riêng; lịch sử cũ không bị viết lại.
+        Có giờ dự kiến: tự tạo Time Block cho các lần hợp lệ. Chưa có giờ: chọn
+        giờ trong phần bên dưới. Ngày bỏ lỡ vẫn tính một lần. Mỗi lần có trạng
+        thái riêng; Checklist và tài liệu được sao chép độc lập. Khi sửa tương
+        lai, giữ các lần đã hoàn thành, có Focus hoặc đã chỉnh riêng; lịch sử cũ
+        không bị viết lại.
       </small>
       {series && scope === 'single' && (
         <small>Để đổi quy tắc lặp, chọn phạm vi “Các lần tương lai”.</small>

@@ -2,6 +2,8 @@ import * as workspaceStorage from './workspaceStorage';
 import type { Task } from './tasks';
 import { groups } from './tasks';
 export type TimeBlock = {
+  recurringTaskId?: string;
+  taskOverride?: boolean;
   recurringHabitId?: string;
   habitDate?: string;
   habitOverride?: boolean;
@@ -30,6 +32,8 @@ export const validBlock = (b: TimeBlock) =>
   typeof b.id === 'string' &&
   typeof b.taskId === 'string' &&
   typeof b.title === 'string' &&
+  (b.recurringTaskId === undefined || typeof b.recurringTaskId === 'string') &&
+  (b.taskOverride === undefined || typeof b.taskOverride === 'boolean') &&
   (b.recurringHabitId === undefined ||
     typeof b.recurringHabitId === 'string') &&
   (b.habitDate === undefined ||

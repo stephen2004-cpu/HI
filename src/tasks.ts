@@ -36,6 +36,8 @@ export const groups = [
 ] as const;
 export type Group = (typeof groups)[number]['id'];
 export type Task = {
+  repeatSchedule?: { time: string; minutes: number } | null;
+  plannedEndTime?: string;
   repeat?: TaskRepeat;
   repeatSeriesId?: string;
   repeatDate?: string;
@@ -61,6 +63,15 @@ export function validTask(t: unknown): t is Task {
   if (!t || typeof t !== 'object') return false;
   const x = t as Task;
   return (
+    (x.plannedEndTime === undefined ||
+      /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(x.plannedEndTime)) &&
+    (x.repeatSchedule === undefined ||
+      x.repeatSchedule === null ||
+      (!!x.repeatSchedule &&
+        /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(x.repeatSchedule.time) &&
+        Number.isFinite(x.repeatSchedule.minutes) &&
+        x.repeatSchedule.minutes > 0 &&
+        x.repeatSchedule.minutes <= 1440)) &&
     (x.repeat === undefined ||
       (!x.repeatSeriesId && validTaskRepeat(x.repeat, validTask))) &&
     (x.repeatSeriesId === undefined ||

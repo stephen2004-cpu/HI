@@ -7,10 +7,12 @@ export default function TaskSetup({
   change,
   changeChecklist,
   draftChecklist = false,
+  recurring = false,
 }: {
   task: Omit<Task, 'id'> & { id?: string };
   change: (p: Partial<Task>) => void;
   draftChecklist?: boolean;
+  recurring?: boolean;
   changeChecklist?: (steps: ChecklistStep[]) => boolean;
 }) {
   const timing = timingOf(task as Task),
@@ -111,13 +113,37 @@ export default function TaskSetup({
         <input
           type="datetime-local"
           value={task.plannedStart ?? ''}
-          onChange={(e) => change({ plannedStart: e.target.value })}
+          onChange={(e) =>
+            change({
+              plannedStart: e.target.value,
+              ...(recurring && !e.target.value ? { repeatSchedule: null } : {}),
+            })
+          }
         />
       </label>
+      {recurring && (
+        <label>
+          Giờ kết thúc Task lặp
+          <input
+            type="time"
+            aria-label="Giờ kết thúc Task lặp"
+            value={task.plannedEndTime ?? ''}
+            onChange={(e) =>
+              change({ plannedEndTime: e.target.value || undefined })
+            }
+          />
+          <small>
+            Để trống: dùng thời lượng Focus và nghỉ đã thiết lập. Cần chọn ngày
+            giờ dự kiến để tự lên lịch.
+          </small>
+        </label>
+      )}
       <p>
         Planned Focus: {duration(plan.focus)} · Planned Break:{' '}
         {duration(plan.rest)} · Calendar cần: {duration(plan.total)}. Ngày giờ
-        dự kiến dùng làm gợi ý khi lên lịch, không tự tạo block.
+        {recurring
+          ? 'dự kiến và giờ kết thúc được dùng để tự lên lịch các lần Task lặp.'
+          : 'dự kiến dùng làm gợi ý khi lên lịch, không tự tạo block.'}
       </p>
       <Checklist
         key={task.id ?? 'new-task'}

@@ -155,16 +155,22 @@ export function applyCalendarEdit(
     nextIds = new Set(next.blocks.map((b) => b.id));
   const hidden = stored.blocks.filter((b) => !visibleIds.has(b.id));
   const cancelled = visible
-    .filter((b) => b.recurringHabitId && !nextIds.has(b.id))
+    .filter(
+      (b) => (b.recurringHabitId || b.recurringTaskId) && !nextIds.has(b.id),
+    )
     .map((b) => ({ ...b, cancelled: true }));
   const edited = next.blocks.map((b) => {
     const old = stored.blocks.find((x) => x.id === b.id);
-    return old?.recurringHabitId &&
+    return (old?.recurringHabitId || old?.recurringTaskId) &&
       (old.start !== b.start ||
         old.end !== b.end ||
         old.color !== b.color ||
         old.taskId !== b.taskId)
-      ? { ...b, habitOverride: true }
+      ? {
+          ...b,
+          ...(old?.recurringHabitId ? { habitOverride: true } : {}),
+          ...(old?.recurringTaskId ? { taskOverride: true } : {}),
+        }
       : b;
   });
   return { ...next, blocks: [...hidden, ...edited, ...cancelled] };
