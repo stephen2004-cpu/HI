@@ -1,3 +1,4 @@
+import { dateInput } from '../planner';
 import { plannedTask, timingOf, type Task, type ChecklistStep } from '../tasks';
 import { duration } from '../engine';
 import Checklist from './Checklist';
@@ -9,12 +10,14 @@ export default function TaskSetup({
   draftChecklist = false,
   recurring = false,
   autoSchedule = false,
+  editableEnd = false,
 }: {
   task: Omit<Task, 'id'> & { id?: string };
   change: (p: Partial<Task>) => void;
   draftChecklist?: boolean;
   recurring?: boolean;
   autoSchedule?: boolean;
+  editableEnd?: boolean;
   changeChecklist?: (steps: ChecklistStep[]) => boolean;
 }) {
   const timing = timingOf(task as Task),
@@ -123,7 +126,36 @@ export default function TaskSetup({
           }
         />
       </label>
-      {recurring && (
+      {editableEnd && (
+        <label>
+          Ngày giờ kết thúc
+          <input
+            type="datetime-local"
+            required
+            aria-label="Ngày giờ kết thúc"
+            value={
+              task.plannedStart
+                ? dateInput(+new Date(task.plannedStart) + plan.total * 1000)
+                : ''
+            }
+            min={task.plannedStart || undefined}
+            onChange={(e) => {
+              const minutes =
+                (+new Date(e.target.value) -
+                  +new Date(task.plannedStart ?? '')) /
+                60000;
+              const count = timing.mode === 'study' ? timing.focusCount : 1;
+              const focusMinutes = (minutes - plan.rest / 60) / count;
+              if (minutes > 0 && minutes <= 1440 && focusMinutes > 0)
+                change({
+                  plannedEndTime: undefined,
+                  timing: { ...timing, focusMinutes },
+                });
+            }}
+          />
+        </label>
+      )}
+      {recurring && !editableEnd && (
         <label>
           Giờ kết thúc Task lặp
           <input

@@ -1,3 +1,4 @@
+import useCalendarSelection from '../useCalendarSelection';
 import { useRef, useState, useEffect } from 'react';
 import { groups, plannedTask, type Task } from '../tasks';
 import useCurrentTime from '../useCurrentTime';
@@ -14,6 +15,7 @@ import {
 } from '../planner';
 type Props = {
   tasks: Task[];
+  createTask?: (start: number, end: number) => void;
   initialDate?: string;
   scheduleRequest?: { taskId: string; date: string; token: number };
   onScheduleOpened?: () => void;
@@ -28,6 +30,7 @@ const shortDate = (d: Date) =>
   `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
 export default function Calendar({
   tasks,
+  createTask,
   initialDate,
   scheduleRequest,
   onScheduleOpened,
@@ -69,6 +72,13 @@ export default function Calendar({
     start: number;
   } | null>(null);
   const [resizeEnd, setResizeEnd] = useState<number | null>(null);
+  const selectionGesture = useCalendarSelection(
+    !locked && !draft && !resizing && view !== 'month' && !!createTask,
+    `${view}:${+date}`,
+    createTask,
+  );
+  const clockLabel = (minute: number) =>
+    `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
   const first = weekStart(date, planner.preferences.weekStart);
   const days =
     view === 'day'
@@ -435,6 +445,11 @@ export default function Calendar({
                   key={+d}
                   className="day-column"
                   aria-label={`Lịch ${shortDate(d)}`}
+                  onPointerDown={(e) => selectionGesture.down(e, d)}
+                  onClickCapture={selectionGesture.click}
+                  data-selecting={
+                    selectionGesture.selection?.day === +d || undefined
+                  }
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => !locked && drop(e, d)}
                 >
@@ -443,14 +458,31 @@ export default function Calendar({
                       key={h}
                       className="hour-slot"
                       aria-label={`Lên lịch ${shortDate(d)} ${h}:00`}
-                      disabled={locked || !tasks.length}
+                      disabled={locked}
                       onClick={() => {
+                        if (!tasks.length) return;
                         const start = new Date(d);
                         start.setHours(h);
                         newBlock(undefined, +start);
                       }}
                     />
                   ))}
+                  {selectionGesture.selection?.day === +d && (
+                    <div
+                      className="calendar-selection"
+                      role="status"
+                      aria-label="Khoảng thời gian đang chọn"
+                      style={{
+                        top: selectionGesture.selection.start,
+                        height:
+                          selectionGesture.selection.end -
+                          selectionGesture.selection.start,
+                      }}
+                    >
+                      {clockLabel(selectionGesture.selection.start)}–
+                      {clockLabel(selectionGesture.selection.end)}
+                    </div>
+                  )}
                   {localNowPosition(d, now) !== null && (
                     <div
                       className="calendar-now-line"

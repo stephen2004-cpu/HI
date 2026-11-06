@@ -52,6 +52,10 @@ const empty: Omit<Task, 'id'> = {
   completed: false,
 };
 type Props = {
+  editorOnly?: boolean;
+  initialDraft?: Partial<Omit<Task, 'id'>>;
+  onSaved?: (message: string) => void;
+  onCancel?: () => void;
   planner: Planner;
   visibleBlocks: TimeBlock[];
   habits: Habit[];
@@ -60,6 +64,10 @@ type Props = {
   plannerError: boolean;
 };
 export default function TaskBoard({
+  editorOnly = false,
+  initialDraft,
+  onSaved,
+  onCancel,
   planner,
   visibleBlocks,
   habits,
@@ -74,10 +82,15 @@ export default function TaskBoard({
       ? 'Không đọc được dữ liệu Task. Dữ liệu gốc được giữ nguyên; hãy sao lưu và tải lại trước khi chỉnh sửa.'
       : '',
   );
-  const [draft, setDraft] = useState(empty);
+  const [draft, setDraft] = useState(() => ({ ...empty, ...initialDraft }));
   const [editing, setEditing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [repeat, setRepeat] = useState<TaskRepeatSettings>(defaultTaskRepeat);
+  const [repeat, setRepeat] = useState<TaskRepeatSettings>(() => ({
+    ...defaultTaskRepeat(),
+    ...(initialDraft?.plannedStart
+      ? { startDate: initialDraft.plannedStart.slice(0, 10) }
+      : {}),
+  }));
   const [editScope, setEditScope] = useState<'single' | 'future'>('single');
   const [deleteError, setDeleteError] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -114,8 +127,8 @@ export default function TaskBoard({
     return () => window.removeEventListener('lbd-tasks-updated', refresh);
   }, []);
   useEffect(() => {
-    onRange(range.from, range.to);
-  }, [+range.from, +range.to, habitToken]);
+    if (!editorOnly) onRange(range.from, range.to);
+  }, [editorOnly, +range.from, +range.to, habitToken]);
   const rows = projectTaskPeriod(
     tasks,
     visibleBlocks,
@@ -234,9 +247,8 @@ export default function TaskBoard({
         );
       setTasks(readTasks().tasks);
       setError('');
-      setNotice(
-        `Đã lưu Task. ${scheduled.added ? `Đã lên lịch ${scheduled.added} lần. ` : ''}${scheduled.updated ? `Đã cập nhật ${scheduled.updated} lịch tương lai. ` : ''}${scheduled.conflicts ? `Cảnh báo: ${scheduled.conflicts} lần trùng lịch; các block khác được giữ nguyên. ` : ''}${!hasTaskStart(task) && !task.repeatSchedule ? 'Chọn ngày giờ dự kiến để tự tạo Time Block. Task chưa có giờ vẫn được giữ trong danh sách chưa lên lịch.' : ''}`,
-      );
+      const savedNotice = `Đã lưu Task. ${scheduled.added ? `Đã lên lịch ${scheduled.added} lần. ` : ''}${scheduled.updated ? `Đã cập nhật ${scheduled.updated} lịch tương lai. ` : ''}${scheduled.conflicts ? `Cảnh báo: ${scheduled.conflicts} lần trùng lịch; các block khác được giữ nguyên. ` : ''}${!hasTaskStart(task) && !task.repeatSchedule ? 'Chọn ngày giờ dự kiến để tự tạo Time Block. Task chưa có giờ vẫn được giữ trong danh sách chưa lên lịch.' : ''}`;
+      setNotice(savedNotice);
       setEditing(null);
       setDraft(empty);
       setRepeat(defaultTaskRepeat());
@@ -249,6 +261,7 @@ export default function TaskBoard({
         setCollapsed((previous) => ({ ...previous, [task.group]: false }));
       }
       onRange(range.from, range.to);
+      onSaved?.(savedNotice);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Không lưu được Task.');
     }
@@ -525,202 +538,217 @@ export default function TaskBoard({
     );
   };
   return (
-    <section className="task-board" aria-labelledby="tasks-title">
-      <h2 id="tasks-title">Task & Ma trận Eisenhower</h2>
-      <p>
-        Kéo công việc giữa các nhóm hoặc dùng mục “Nhóm ưu tiên”. Màu riêng chỉ
-        đổi màu thẻ.
-      </p>
-      {error && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
+    <section
+      className="task-board"
+      aria-labelledby={editorOnly ? undefined : 'tasks-title'}
+      aria-label={editorOnly ? 'Thiết lập Task' : undefined}
+    >
+      {editorOnly && error && <p role="alert">{error}</p>}
+      {!editorOnly && (
+        <>
+          <h2 id="tasks-title">Task & Ma trận Eisenhower</h2>
+          <p>
+            Kéo công việc giữa các nhóm hoặc dùng mục “Nhóm ưu tiên”. Màu riêng
+            chỉ đổi màu thẻ.
+          </p>
+          {error && <p role="alert">{error}</p>}
+          {notice && <p role="status">{notice}</p>}
 
-      <div className="task-period-toolbar">
-        <div
-          className="task-period-tabs"
-          role="group"
-          aria-label="Khoảng thời gian Task"
-        >
-          {(
-            [
-              ['day', 'Ngày'],
-              ['week', 'Tuần'],
-              ['month', 'Tháng'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              className="button"
-              aria-pressed={period === value}
-              onClick={() => setPeriod(value)}
+          <div className="task-period-toolbar">
+            <div
+              className="task-period-tabs"
+              role="group"
+              aria-label="Khoảng thời gian Task"
             >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="task-period-controls">
-          <button
-            className="button"
-            aria-label="Khoảng Task trước"
-            onClick={() => setDate(shiftTaskDate(date, period, -1))}
-          >
-            ←
-          </button>
-          <button
-            className="button"
-            onClick={() => setDate(localDate(new Date()))}
-          >
-            Hôm nay
-          </button>
-          <button
-            className="button"
-            aria-label="Khoảng Task sau"
-            onClick={() => setDate(shiftTaskDate(date, period, 1))}
-          >
-            →
-          </button>
-          <label>
-            Ngày tham chiếu Task
-            <input
-              type="date"
-              required
-              value={date}
-              onChange={(e) => {
-                if (validDate(e.target.value)) setDate(e.target.value);
-              }}
-            />
-          </label>
-          <label>
-            Trạng thái Task
-            <select
-              aria-label="Trạng thái Task"
-              value={status}
-              onChange={(e) => setStatus(e.target.value as TaskStatusFilter)}
-            >
-              <option value="all">Tất cả</option>
-              <option value="pending">Chưa hoàn thành</option>
-              <option value="done">Đã hoàn thành</option>
-            </select>
-          </label>
-        </div>
-        <button
-          className="button primary"
-          onClick={() => {
-            setEditing(null);
-            setDraft(empty);
-            setRepeat(defaultTaskRepeat());
-            setEditScope('single');
-            showForm();
-          }}
-        >
-          Tạo Task
-        </button>
-      </div>
-      <div className="task-period-heading">
-        <h3>
-          {range.from.toLocaleDateString('vi-VN')} –{' '}
-          {new Date(+range.to - 1).toLocaleDateString('vi-VN')}
-        </h3>
-        <p role="status">
-          Đang hiển thị {shown.length}/{periodRows.length} Task trong khoảng ·{' '}
-          {periodRows.filter((row) => row.task.completed).length} đã hoàn thành
-        </p>
-        <p className="muted">
-          Một thẻ cho mỗi Task. Nhiều Time Block được gộp trên thẻ; tuần từ Thứ
-          Hai đến Chủ nhật.
-        </p>
-      </div>
-      <div className="eisenhower-grid">
-        {groups.map((g) => {
-          const items = shown.filter((row) => row.task.group === g.id),
-            done = items.filter((row) => row.task.completed).length;
-          return (
-            <section
-              key={g.id}
-              className="quadrant"
-              style={{ borderTopColor: g.color }}
-              aria-label={g.name}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                const id = e.dataTransfer.getData('text/plain') || dragging;
-                if (id) commit(moveTask(tasks, id, g.id));
-                setDragging(null);
-              }}
-            >
-              <h3 style={{ color: g.color }}>
+              {(
+                [
+                  ['day', 'Ngày'],
+                  ['week', 'Tuần'],
+                  ['month', 'Tháng'],
+                ] as const
+              ).map(([value, label]) => (
                 <button
-                  className="quadrant-toggle"
-                  aria-label={`Thu gọn/mở rộng ${g.name}`}
-                  aria-expanded={!collapsed[g.id]}
-                  aria-controls={`tasks-${g.id}`}
-                  onClick={() =>
-                    setCollapsed({ ...collapsed, [g.id]: !collapsed[g.id] })
+                  key={value}
+                  className="button"
+                  aria-pressed={period === value}
+                  onClick={() => setPeriod(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="task-period-controls">
+              <button
+                className="button"
+                aria-label="Khoảng Task trước"
+                onClick={() => setDate(shiftTaskDate(date, period, -1))}
+              >
+                ←
+              </button>
+              <button
+                className="button"
+                onClick={() => setDate(localDate(new Date()))}
+              >
+                Hôm nay
+              </button>
+              <button
+                className="button"
+                aria-label="Khoảng Task sau"
+                onClick={() => setDate(shiftTaskDate(date, period, 1))}
+              >
+                →
+              </button>
+              <label>
+                Ngày tham chiếu Task
+                <input
+                  type="date"
+                  required
+                  value={date}
+                  onChange={(e) => {
+                    if (validDate(e.target.value)) setDate(e.target.value);
+                  }}
+                />
+              </label>
+              <label>
+                Trạng thái Task
+                <select
+                  aria-label="Trạng thái Task"
+                  value={status}
+                  onChange={(e) =>
+                    setStatus(e.target.value as TaskStatusFilter)
                   }
                 >
-                  <span>
-                    {g.name} <small>({items.length})</small>
-                  </span>
-                  <span aria-hidden="true">{collapsed[g.id] ? '＋' : '−'}</span>
-                </button>
-              </h3>
-              <p>{g.description}</p>
-              <p className="quadrant-count">
-                {done} đã hoàn thành · {items.length - done} chưa hoàn thành
+                  <option value="all">Tất cả</option>
+                  <option value="pending">Chưa hoàn thành</option>
+                  <option value="done">Đã hoàn thành</option>
+                </select>
+              </label>
+            </div>
+            <button
+              className="button primary"
+              onClick={() => {
+                setEditing(null);
+                setDraft(empty);
+                setRepeat(defaultTaskRepeat());
+                setEditScope('single');
+                showForm();
+              }}
+            >
+              Tạo Task
+            </button>
+          </div>
+          <div className="task-period-heading">
+            <h3>
+              {range.from.toLocaleDateString('vi-VN')} –{' '}
+              {new Date(+range.to - 1).toLocaleDateString('vi-VN')}
+            </h3>
+            <p role="status">
+              Đang hiển thị {shown.length}/{periodRows.length} Task trong khoảng
+              · {periodRows.filter((row) => row.task.completed).length} đã hoàn
+              thành
+            </p>
+            <p className="muted">
+              Một thẻ cho mỗi Task. Nhiều Time Block được gộp trên thẻ; tuần từ
+              Thứ Hai đến Chủ nhật.
+            </p>
+          </div>
+          <div className="eisenhower-grid">
+            {groups.map((g) => {
+              const items = shown.filter((row) => row.task.group === g.id),
+                done = items.filter((row) => row.task.completed).length;
+              return (
+                <section
+                  key={g.id}
+                  className="quadrant"
+                  style={{ borderTopColor: g.color }}
+                  aria-label={g.name}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const id = e.dataTransfer.getData('text/plain') || dragging;
+                    if (id) commit(moveTask(tasks, id, g.id));
+                    setDragging(null);
+                  }}
+                >
+                  <h3 style={{ color: g.color }}>
+                    <button
+                      className="quadrant-toggle"
+                      aria-label={`Thu gọn/mở rộng ${g.name}`}
+                      aria-expanded={!collapsed[g.id]}
+                      aria-controls={`tasks-${g.id}`}
+                      onClick={() =>
+                        setCollapsed({ ...collapsed, [g.id]: !collapsed[g.id] })
+                      }
+                    >
+                      <span>
+                        {g.name} <small>({items.length})</small>
+                      </span>
+                      <span aria-hidden="true">
+                        {collapsed[g.id] ? '＋' : '−'}
+                      </span>
+                    </button>
+                  </h3>
+                  <p>{g.description}</p>
+                  <p className="quadrant-count">
+                    {done} đã hoàn thành · {items.length - done} chưa hoàn thành
+                  </p>
+                  <details>
+                    <summary aria-label={`Giải thích ${g.name}`}>
+                      ⓘ Ý nghĩa và ví dụ
+                    </summary>
+                    <p>
+                      {g.id === 'do'
+                        ? 'Làm trước vì quan trọng và sắp hết hạn.'
+                        : g.id === 'schedule'
+                          ? 'Dành thời gian trong lịch cho việc quan trọng.'
+                          : g.id === 'delegate'
+                            ? 'Nhờ người phù hợp hỗ trợ.'
+                            : 'Cân nhắc bỏ qua, không tự xóa.'}
+                    </p>
+                  </details>
+                  <div id={`tasks-${g.id}`} hidden={!!collapsed[g.id]}>
+                    {items.map(taskCard)}
+                    {!items.length && (
+                      <p className="task-empty">Không có Task phù hợp bộ lọc</p>
+                    )}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+          <section className="task-backlog" aria-label="Task quá hạn">
+            <h3>Task quá hạn ({overdue.length + overdueInRange})</h3>
+            <p>
+              So với ngày hôm nay. Lịch cũ được giữ nguyên; bạn chủ động chọn
+              giờ mới.
+            </p>
+            {!!overdueInRange && (
+              <p>
+                {overdueInRange} Task quá hạn đã hiển thị trong 4 nhóm bên trên,
+                không lặp lại thẻ.
               </p>
-              <details>
-                <summary aria-label={`Giải thích ${g.name}`}>
-                  ⓘ Ý nghĩa và ví dụ
-                </summary>
-                <p>
-                  {g.id === 'do'
-                    ? 'Làm trước vì quan trọng và sắp hết hạn.'
-                    : g.id === 'schedule'
-                      ? 'Dành thời gian trong lịch cho việc quan trọng.'
-                      : g.id === 'delegate'
-                        ? 'Nhờ người phù hợp hỗ trợ.'
-                        : 'Cân nhắc bỏ qua, không tự xóa.'}
-                </p>
-              </details>
-              <div id={`tasks-${g.id}`} hidden={!!collapsed[g.id]}>
-                {items.map(taskCard)}
-                {!items.length && (
-                  <p className="task-empty">Không có Task phù hợp bộ lọc</p>
-                )}
-              </div>
-            </section>
-          );
-        })}
-      </div>
-      <section className="task-backlog" aria-label="Task quá hạn">
-        <h3>Task quá hạn ({overdue.length + overdueInRange})</h3>
-        <p>
-          So với ngày hôm nay. Lịch cũ được giữ nguyên; bạn chủ động chọn giờ
-          mới.
-        </p>
-        {!!overdueInRange && (
-          <p>
-            {overdueInRange} Task quá hạn đã hiển thị trong 4 nhóm bên trên,
-            không lặp lại thẻ.
-          </p>
-        )}
-        <div className="task-backlog-grid">{overdue.map(taskCard)}</div>
-        {!overdue.length && !overdueInRange && (
-          <p className="task-empty">Không có Task quá hạn phù hợp.</p>
-        )}
-      </section>
-      <section className="task-backlog" aria-label="Task chưa lên lịch">
-        <h3>Task chưa lên lịch ({unscheduled.length})</h3>
-        <p>
-          Chưa có ngày thực hiện, tách riêng khỏi 4 nhóm của khoảng đang xem.
-        </p>
-        <div className="task-backlog-grid">{unscheduled.map(taskCard)}</div>
-        {!unscheduled.length && (
-          <p className="task-empty">Không có Task chưa lên lịch phù hợp.</p>
-        )}
-      </section>
+            )}
+            <div className="task-backlog-grid">{overdue.map(taskCard)}</div>
+            {!overdue.length && !overdueInRange && (
+              <p className="task-empty">Không có Task quá hạn phù hợp.</p>
+            )}
+          </section>
+          <section className="task-backlog" aria-label="Task chưa lên lịch">
+            <h3>Task chưa lên lịch ({unscheduled.length})</h3>
+            <p>
+              Chưa có ngày thực hiện, tách riêng khỏi 4 nhóm của khoảng đang
+              xem.
+            </p>
+            <div className="task-backlog-grid">{unscheduled.map(taskCard)}</div>
+            {!unscheduled.length && (
+              <p className="task-empty">Không có Task chưa lên lịch phù hợp.</p>
+            )}
+          </section>
+        </>
+      )}
       <h3 className="task-editor-heading">
         {editing ? 'Chỉnh sửa Task' : 'Tạo Task mới'}
       </h3>
@@ -728,6 +756,7 @@ export default function TaskBoard({
         <label>
           Tên công việc
           <input
+            autoFocus={editorOnly}
             required
             maxLength={200}
             value={draft.title}
@@ -802,6 +831,7 @@ export default function TaskBoard({
         <TaskSetup
           key={editing ?? 'new-task'}
           autoSchedule
+          editableEnd={editorOnly}
           recurring={repeat.mode === 'weekly' || !!editingTask?.repeatSeriesId}
           task={{ ...draft, id: editing ?? undefined }}
           change={(patch) =>
@@ -837,9 +867,17 @@ export default function TaskBoard({
               : undefined
           }
         />
-        <button className="button primary" disabled={loaded.error}>
-          {editing ? 'Lưu Task' : 'Thêm Task'}
+        <button
+          className="button primary"
+          disabled={loaded.error || (editorOnly && plannerError)}
+        >
+          {editing || editorOnly ? 'Lưu Task' : 'Thêm Task'}
         </button>
+        {editorOnly && (
+          <button type="button" className="button" onClick={onCancel}>
+            Hủy
+          </button>
+        )}
         {editing && (
           <button
             type="button"

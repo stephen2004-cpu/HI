@@ -1620,3 +1620,44 @@ footer {
   color: var(--gold);
   font-size: 11px;
 }
+/* Draft-only Calendar selection: never intercept existing blocks or the Now Line. */
+.day-column[data-selecting] {
+  user-select: none;
+}
+.calendar-selection {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  z-index: 4;
+  border: 1px dashed var(--gold);
+  border-radius: 8px;
+  background: #d5ac6438;
+  color: var(--cream);
+  padding: 0 3px;
+  pointer-events: none;
+  font-size: 11px;
+  line-height: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.calendar-task-dialog {
+  width: min(900px, calc(100vw - 24px));
+  max-height: 90dvh;
+  overflow: auto;
+  border: 1px solid var(--gold);
+  border-radius: 18px;
+  padding: 24px;
+  background: var(--surface);
+  color: var(--cream);
+}
+.calendar-task-dialog::backdrop {
+  background: #000b;
+}
+.calendar-task-dialog .task-board {
+  padding: 0;
+}
+@media (max-width: 700px) {
+  .calendar-task-dialog {
+    padding: 14px;
+  }
+}

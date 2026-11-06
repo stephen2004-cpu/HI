@@ -1,3 +1,4 @@
+import CalendarTaskDialog from './components/CalendarTaskDialog';
 import {
   scheduleTaskRepeats,
   persistTaskCalendar,
@@ -92,6 +93,10 @@ export default function App() {
     return () => window.removeEventListener('lbd-habits-updated', refresh);
   }, []);
   const [calendarDate, setCalendarDate] = useState('');
+  const [calendarSelection, setCalendarSelection] = useState<{
+    start: number;
+    end: number;
+  } | null>(null);
   const [calendarTaskRequest, setCalendarTaskRequest] = useState<
     { taskId: string; date: string; token: number } | undefined
   >();
@@ -748,15 +753,31 @@ export default function App() {
         {screen === 'Lịch' && (
           <Calendar
             tasks={taskState.tasks}
+            createTask={(start, end) => setCalendarSelection({ start, end })}
             planner={displayPlanner}
             initialDate={calendarDate}
             scheduleRequest={calendarTaskRequest}
             onScheduleOpened={() => setCalendarTaskRequest(undefined)}
             update={updateCalendar}
             onRange={ensureHabitRange}
-            recurrenceToken={JSON.stringify(habitState.habits)}
+            recurrenceToken={JSON.stringify([
+              habitState.habits,
+              readTaskStore().tasks.filter((t) => t.repeat),
+            ])}
             focusTask={focusTask}
             locked={plannerState.error || taskState.error}
+          />
+        )}
+        {screen === 'Lịch' && calendarSelection && (
+          <CalendarTaskDialog
+            range={calendarSelection}
+            planner={planner}
+            blocks={displayBlocks}
+            habits={habitState.habits}
+            onRange={ensureHabitRange}
+            locked={plannerState.error || taskState.error}
+            close={() => setCalendarSelection(null)}
+            saved={(message) => setNotice(message)}
           />
         )}
         {screen === 'Task' && (
