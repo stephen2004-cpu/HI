@@ -1,6 +1,7 @@
 import * as workspaceStorage from './workspaceStorage';
 import { type Snapshot, type Session, type Sound, defaults } from './engine';
 export type Settings = {
+  focusSelection?: { taskId: string; blockId?: string };
   hours: number;
   minutes: number;
   seconds: number;
@@ -88,6 +89,15 @@ export function parseSaved(value: unknown): Saved | null {
       )
       .slice(0, 1000);
     // Optional V2 metadata must not invalidate otherwise recoverable legacy data.
+    if (
+      s.focusSelection !== undefined &&
+      (!s.focusSelection ||
+        typeof s.focusSelection !== 'object' ||
+        typeof s.focusSelection.taskId !== 'string' ||
+        (s.focusSelection.blockId !== undefined &&
+          typeof s.focusSelection.blockId !== 'string'))
+    )
+      delete s.focusSelection;
     if (r) {
       if (typeof r.taskId !== 'string') delete r.taskId;
       if (r.measured !== true) delete r.measured;

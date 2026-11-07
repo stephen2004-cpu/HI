@@ -33,6 +33,7 @@ const sections = [
     steps: [
       'Chọn Task nếu muốn liên kết phiên làm việc, hoặc dùng Timer độc lập. Chọn Đồng hồ đếm ngược hay Chế độ học tập và thiết lập thời gian trước khi bắt đầu.',
       'Nhấn Bắt đầu tập trung. Dùng các nút tạm dừng, tiếp tục hoặc kết thúc theo nhu cầu. Actual Time chỉ ghi thời gian làm thực tế, không gồm thời gian tạm dừng hoặc nghỉ.',
+      'Khi cần làm việc khác, nhấn Về Focus tự do. Phiên hiện tại kết thúc và lưu thời gian đã làm; Task vẫn chưa hoàn thành. Dùng Quay lại trong mục Task chưa hoàn thành ở phía trên để mở lại công việc.',
       'Trong workspace, Timer ở bên trái; checklist, ghi chú, đầu ra cần đạt và kết quả thực tế ở bên phải. Trên điện thoại, các phần xếp theo chiều dọc.',
       'Tự cập nhật checklist và kết quả khi làm việc. Timer kết thúc không tự đánh dấu Habit hoàn thành. Điều chỉnh âm lượng tại Focus và dùng Tắt chuông khi báo hết giờ.',
     ],

@@ -3092,3 +3092,53 @@ main:has(.linked-focus) {
   background: var(--gold);
   color: #151412;
 }
+
+/* Return to free Focus while keeping unfinished work within reach. */
+.focus-free-action {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.focus-free-action small,
+.focus-unfinished p,
+.focus-unfinished small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.focus-unfinished {
+  margin-bottom: 24px;
+}
+.focus-unfinished h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.focus-unfinished ul {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: grid;
+  gap: 10px;
+}
+.focus-unfinished li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.focus-unfinished li > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.focus-unfinished .button {
+  flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  .focus-unfinished li {
+    align-items: start;
+    flex-wrap: wrap;
+  }
+}

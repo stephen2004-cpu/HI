@@ -1,3 +1,9 @@
+import {
+  focusSelection,
+  freeFocus,
+  persistFreeFocus,
+  unfinishedFocusTasks,
+} from './focusWorkspace';
 import CalendarTaskDialog from './components/CalendarTaskDialog';
 import {
   scheduleTaskRepeats,
@@ -112,16 +118,10 @@ export default function App() {
       : '',
   );
   const [selectedTask, setSelectedTask] = useState(
-    () =>
-      load().snapshot.run?.taskId ??
-      load().snapshot.history.find((h) => h.taskId)?.taskId ??
-      '',
+    () => focusSelection(load()).taskId,
   );
   const [selectedBlock, setSelectedBlock] = useState(
-    () =>
-      load().snapshot.run?.blockId ??
-      load().snapshot.history.find((h) => h.taskId)?.blockId ??
-      '',
+    () => focusSelection(load()).blockId,
   );
   const [reviewState, setReviewState] = useState(loadReviews);
   useEffect(() => {
@@ -437,10 +437,40 @@ export default function App() {
       minutes: Math.floor(secs / 60) % 60,
       seconds: secs % 60,
       name: t.title,
+      focusSelection: { taskId: id, blockId },
       sessions,
       loop: false,
     });
   };
+  const returnToFreeFocus = () => {
+    const taskId = dataRef.current.snapshot.run?.taskId || selectedTask;
+    if (!taskId) return;
+    const next = freeFocus(dataRef.current, Date.now());
+    if (!persistFreeFocus(next, taskId)) {
+      setNotice(
+        'Không lưu được thao tác tạm gác Task. Bạn vẫn ở phiên hiện tại; hãy kiểm tra dung lượng hoặc quyền lưu trữ rồi thử lại.',
+      );
+      return;
+    }
+    lastSaved.current = JSON.stringify(next);
+    setStorageError(false);
+    update(next);
+    setTaskState(readTasks());
+    setSelectedTask('');
+    setSelectedBlock('');
+    setMode('timer');
+    setConfirm(null);
+    silenceAlarm();
+    setFocus(false);
+    if (document.fullscreenElement) void document.exitFullscreen();
+    setNotice(
+      'Đã về Focus tự do. Thời gian đã làm được lưu; Task chưa hoàn thành vẫn có thể quay lại ở phía trên.',
+    );
+  };
+  const unfinishedTasks = unfinishedFocusTasks(
+    taskState.tasks,
+    run?.taskId || selectedTask,
+  );
   const snap = (snapshot: Snapshot) => update({ ...dataRef.current, snapshot });
   const announce = (message: string) => setNotice(message);
   useEffect(() => {
@@ -818,6 +848,56 @@ export default function App() {
         )}
         {screen === 'Focus' && (
           <>
+            {unfinishedTasks.length > 0 && (
+              <section
+                className="focus-unfinished workspace-card"
+                aria-labelledby="focus-unfinished-title"
+              >
+                <h2 id="focus-unfinished-title">Task chưa hoàn thành</h2>
+                <p>Bạn có thể quay lại các Task đang làm dở khi sẵn sàng.</p>
+                <ul>
+                  {unfinishedTasks.map((task) => (
+                    <li key={task.id}>
+                      <div>
+                        <strong>{task.title}</strong>
+                        <small>
+                          {task.repeatDate ? `${task.repeatDate} · ` : ''}
+                          {task.checklist?.length
+                            ? `${task.checklist.filter((step) => step.done).length}/${task.checklist.length} bước hoàn thành`
+                            : 'Chưa hoàn thành'}
+                        </small>
+                      </div>
+                      <button
+                        className="button outline"
+                        disabled={!!run}
+                        aria-label={`Quay lại ${task.title}`}
+                        onClick={() => {
+                          const previous = data.snapshot.history.find(
+                            (entry) => entry.taskId === task.id,
+                          );
+                          const candidates = displayBlocks.filter(
+                            (block) => block.taskId === task.id,
+                          );
+                          const block = previous
+                            ? candidates.find(
+                                (block) => block.id === previous.blockId,
+                              )
+                            : candidates.length === 1
+                              ? candidates[0]
+                              : undefined;
+                          focusTask(task.id, block?.id);
+                        }}
+                      >
+                        <Play size={16} /> Quay lại
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {run && (
+                  <small>Kết thúc phiên hiện tại trước khi đổi Task.</small>
+                )}
+              </section>
+            )}
             <div
               className={`focus-workspace ${run?.taskId || selectedTask ? 'linked-focus' : ''}`}
             >
@@ -828,7 +908,11 @@ export default function App() {
                     <select
                       disabled={!!run}
                       value={run?.taskId || selectedTask}
-                      onChange={(e) => selectTask(e.target.value)}
+                      onChange={(e) =>
+                        e.target.value
+                          ? selectTask(e.target.value)
+                          : returnToFreeFocus()
+                      }
                     >
                       <option value="">Không chọn Task — Focus độc lập</option>
                       {run?.taskId &&
@@ -843,6 +927,22 @@ export default function App() {
                       ))}
                     </select>
                   </label>
+                  {(run?.taskId || selectedTask) && (
+                    <div className="focus-free-action">
+                      <button
+                        className="button outline"
+                        onClick={returnToFreeFocus}
+                      >
+                        <ArrowUpRight size={16} /> Về Focus tự do
+                      </button>
+                      {run && (
+                        <small>
+                          Kết thúc phiên hiện tại, giữ thời gian đã làm và tiến
+                          độ Task.
+                        </small>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="focus-plan">
                   {linkedBlock &&
