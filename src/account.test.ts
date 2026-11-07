@@ -91,7 +91,9 @@ it('imports only on explicit merge, retaining account collisions, guest data and
   expect(values.size).toBe(0);
 });
 it('keeps local pending changes on offline failure and stale revisions instead of overwriting', async () => {
-  storeWorkspace('a', emptyWorkspace());
+  const local = emptyWorkspace();
+  local.timer.settings.name = 'Unsynced edit';
+  storeWorkspace('a', local);
   writeMeta('a', { revision: 1, dirty: true });
   const client = {
     rpc: vi.fn(async (name: string) =>
@@ -121,7 +123,9 @@ it('does not apply an in-flight response after sign-out/switch', async () => {
   expect(values.has(scopedKey('lbd-focus-v2-timer', 'b'))).toBe(false);
 });
 it('preserves edits made during an upload for the next CAS commit', async () => {
-  storeWorkspace('a', emptyWorkspace());
+  const pending = emptyWorkspace();
+  pending.timer.settings.name = 'Pending edit';
+  storeWorkspace('a', pending);
   writeMeta('a', { revision: 0, dirty: true });
   let finish!: (x: unknown) => void;
   const client = {
@@ -416,7 +420,10 @@ it('an upload timeout retains the dirty snapshot and releases the lock for a saf
   let writes = 0;
   const rpc = vi.fn((name: string) =>
     name === 'lbd_read_workspace'
-      ? Promise.resolve({ data: { revision: 1, payload: w }, error: null })
+      ? Promise.resolve({
+          data: { revision: 1, payload: emptyWorkspace() },
+          error: null,
+        })
       : ++writes === 1
         ? new Promise(() => {})
         : Promise.resolve({ data: 2, error: null }),
@@ -466,6 +473,9 @@ it('stops idle polling in hidden tabs, resumes on visibility and still uploads h
   await vi.advanceTimersByTimeAsync(0);
   expect(rpc).toHaveBeenCalledTimes(2);
   doc.visibilityState = 'hidden';
+  const changed = readWorkspace('a');
+  changed.timer.settings.name = 'Changed while hidden';
+  storeWorkspace('a', changed);
   writeMeta('a', { revision: 1, dirty: true });
   await vi.advanceTimersByTimeAsync(3000);
   expect(rpc.mock.calls.some(([name]) => name === 'lbd_commit_workspace')).toBe(
@@ -506,5 +516,120 @@ it('does not replace a warm workspace while the user is typing an unsaved form',
   expect(e.status).toBe('remote-waiting');
   expect(readWorkspace('a').timer.settings.name).toBe(w.timer.settings.name);
   expect(readMeta('a')).toEqual({ revision: 1, dirty: false });
+  e.stop();
+});
+
+it('acknowledges identical record/key order changes without another database write', async () => {
+  const w = emptyWorkspace();
+  w.tasks.tasks = [
+    {
+      id: 'a',
+      title: 'Keep',
+      group: 'do',
+      notes: '',
+      color: '',
+      completed: false,
+    },
+    {
+      id: 'b',
+      title: 'Keep second',
+      group: 'do',
+      notes: '',
+      color: '',
+      completed: false,
+    },
+  ];
+  const local = structuredClone(w);
+  local.tasks.tasks.reverse();
+  storeWorkspace('a', local);
+  writeMeta('a', { revision: 1, dirty: true });
+  const rpc = vi.fn(async () => ({
+    data: { revision: 2, payload: w },
+    error: null,
+  }));
+  const e = new WorkspaceSync(
+    { rpc } as unknown as SupabaseClient,
+    'a',
+    vi.fn(),
+  );
+  await e.start();
+  expect(readMeta('a')).toEqual({ revision: 2, dirty: false });
+  expect(rpc.mock.calls).toHaveLength(1);
+  expect(readWorkspace('a').tasks.tasks).toEqual(local.tasks.tasks);
+  e.stop();
+});
+it('does not commit pending local data while the initial server read keeps failing', async () => {
+  const w = emptyWorkspace();
+  w.timer.settings.name = 'Keep offline work';
+  storeWorkspace('a', w);
+  writeMeta('a', { revision: 1, dirty: true });
+  const rpc = vi.fn(async (_name: string) => ({
+    data: null,
+    error: { code: 'NETWORK' },
+  }));
+  const e = new WorkspaceSync(
+    { rpc } as unknown as SupabaseClient,
+    'a',
+    vi.fn(),
+  );
+  await e.start();
+  await e.tick();
+  expect(rpc.mock.calls.every(([name]) => name === 'lbd_read_workspace')).toBe(
+    true,
+  );
+  expect(readMeta('a').dirty).toBe(true);
+  expect(readWorkspace('a')).toEqual(w);
+  e.stop();
+});
+it('does not resend an already accepted unchanged snapshot when a dirty event repeats', async () => {
+  const w = emptyWorkspace();
+  storeWorkspace('a', w);
+  writeMeta('a', { revision: 0, dirty: false });
+  const rpc = vi.fn(async (name: string) =>
+    name === 'lbd_read_workspace'
+      ? { data: { revision: 0, payload: w }, error: null }
+      : { data: 1, error: null },
+  );
+  const e = new WorkspaceSync(
+    { rpc } as unknown as SupabaseClient,
+    'a',
+    vi.fn(),
+  );
+  await e.start();
+  setWorkspaceUser('a');
+  const changed = readWorkspace('a');
+  changed.timer.settings.name = 'Real edit';
+  setItem('lbd-focus-v2-timer', JSON.stringify(changed.timer));
+  await e.tick();
+  writeMeta('a', { revision: 1, dirty: true });
+  await e.tick();
+  expect(
+    rpc.mock.calls.filter(([name]) => name === 'lbd_commit_workspace'),
+  ).toHaveLength(1);
+  expect(readMeta('a')).toEqual({ revision: 1, dirty: false });
+  e.stop();
+});
+it('backs off automatic retries after server errors while allowing one explicit retry', async () => {
+  vi.useFakeTimers();
+  const rpc = vi.fn(async (_name: string) => ({
+    data: null,
+    error: { code: 'NETWORK' },
+  }));
+  const e = new WorkspaceSync(
+    { rpc } as unknown as SupabaseClient,
+    'a',
+    vi.fn(),
+  );
+  await e.start();
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(rpc).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(rpc).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(9000);
+  expect(rpc).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(rpc).toHaveBeenCalledTimes(3);
+  await e.retry();
+  expect(rpc).toHaveBeenCalledTimes(4);
   e.stop();
 });

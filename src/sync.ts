@@ -27,18 +27,39 @@ export type SyncStatus =
   'loading' | 'synced' | 'pending' | 'error' | 'conflict' | 'remote-waiting';
 export const SYNC_READ_TIMEOUT_MS = 12000;
 export const SYNC_WRITE_TIMEOUT_MS = 20000;
+export const SYNC_MAX_BACKOFF_MS = 60000;
 class SyncTimeoutError extends Error {}
 export class WorkspaceSync {
   private stopped = false;
   private busy = false;
   private initializing = false;
   private requests = new Set<AbortController>();
+  private failures = 0;
+  private nextAutomaticAttempt = 0;
+  private serverSnapshot:
+    | { revision: number; fingerprint: string; payload: Workspace | null }
+    | undefined;
+  private acceptedSnapshot:
+    { revision: number; fingerprint: string; confirmed: boolean } | undefined;
+  private automaticTick = () => {
+    if (Date.now() >= this.nextAutomaticAttempt) void this.tick();
+  };
   private resumed = () => {
     if (
       typeof document === 'undefined' ||
       document.visibilityState !== 'hidden'
     )
+      this.automaticTick();
+  };
+  private reconnected = () => {
+    if (
+      typeof document === 'undefined' ||
+      document.visibilityState !== 'hidden' ||
+      readMeta(this.id).dirty
+    ) {
+      this.nextAutomaticAttempt = 0;
       void this.tick();
+    }
   };
   private timer: ReturnType<typeof setInterval> | undefined;
   status: SyncStatus = 'loading';
@@ -54,6 +75,14 @@ export class WorkspaceSync {
   ) {}
   private notify(status: SyncStatus, message: string, reload = false) {
     if (this.stopped) return;
+    if (status === 'error') {
+      this.failures = Math.min(this.failures + 1, 8);
+      this.nextAutomaticAttempt =
+        Date.now() + Math.min(SYNC_MAX_BACKOFF_MS, 3000 * 2 ** this.failures);
+    } else if (status === 'synced') {
+      this.failures = 0;
+      this.nextAutomaticAttempt = 0;
+    }
     noteHabitSyncPhase(this.id, status);
     this.status = status;
     this.message = message;
@@ -145,10 +174,39 @@ export class WorkspaceSync {
           );
         }
       }
-      if (!this.stopped)
+      if (!this.stopped) {
         acknowledgeHabitDeletions(this.id, data.payload?.habits.habits ?? []);
+        this.serverSnapshot = {
+          revision: data.revision,
+          fingerprint: workspaceFingerprint(data.payload ?? emptyWorkspace()),
+          payload: data.payload,
+        };
+      }
       return data as { revision: number; payload: Workspace | null };
     });
+  }
+  private acknowledgeUnchanged(): boolean {
+    const meta = readMeta(this.id);
+    if (!meta.dirty) return false;
+    const fingerprint = workspaceFingerprint(readWorkspace(this.id));
+    const server = this.serverSnapshot;
+    if (
+      server &&
+      server.revision >= meta.revision &&
+      server.fingerprint === fingerprint
+    ) {
+      writeMeta(this.id, { revision: server.revision, dirty: false });
+    } else if (server && server.revision > meta.revision) {
+      return false;
+    } else if (
+      this.acceptedSnapshot?.confirmed &&
+      this.acceptedSnapshot.revision === meta.revision &&
+      this.acceptedSnapshot.fingerprint === fingerprint
+    ) {
+      writeMeta(this.id, { revision: meta.revision, dirty: false });
+    } else return false;
+    this.notify('synced', 'Đã đồng bộ; không có thay đổi mới cần gửi.');
+    return true;
   }
   private retainRemoteDeletions(payload: Workspace | null) {
     if (!payload) return false;
@@ -199,7 +257,10 @@ export class WorkspaceSync {
           workspaceFingerprint(remote.payload ?? emptyWorkspace());
       if (local.dirty) {
         const deletedChanged = this.retainRemoteDeletions(remote.payload);
-        if (remote.revision !== local.revision)
+        if (this.acknowledgeUnchanged()) {
+          if (deletedChanged)
+            this.notify('synced', 'Đã đồng bộ dấu xóa từ máy chủ.', true);
+        } else if (remote.revision !== local.revision)
           this.notify(
             'conflict',
             'Có thay đổi trên thiết bị khác. Giữ các thay đổi cục bộ còn lại và dấu xóa vĩnh viễn từ máy chủ.',
@@ -244,12 +305,12 @@ export class WorkspaceSync {
           !readMeta(this.id).dirty
         )
           return;
-        void this.tick();
+        this.automaticTick();
       }, 3000);
       if (typeof document !== 'undefined')
         document.addEventListener('visibilitychange', this.resumed);
       if (typeof window !== 'undefined')
-        window.addEventListener('online', this.resumed);
+        window.addEventListener('online', this.reconnected);
     }
   }
   localChanged() {
@@ -273,10 +334,20 @@ export class WorkspaceSync {
     this.busy = true;
     try {
       recoverIncoming(this.id);
-      const meta = readMeta(this.id);
+      let meta = readMeta(this.id);
+      if (meta.dirty && !this.serverSnapshot) {
+        // Never queue a blind write after startup failed to read the server.
+        await this.remote();
+        if (this.stopped) return;
+        meta = readMeta(this.id);
+      }
       if (meta.dirty) {
+        if (this.acknowledgeUnchanged()) return;
         const snapshot = readWorkspace(this.id),
-          serialized = JSON.stringify(snapshot);
+          serialized = workspaceFingerprint(snapshot);
+        const hasDeletions =
+          snapshot.habits.habits.some((h) => h.deletedAt !== undefined) ||
+          snapshot.tasks.tasks.some((t) => t.deletedAt !== undefined);
         const { data, error } = await this.request(
           async (signal) =>
             await this.rpc('lbd_commit_workspace', signal, {
@@ -314,14 +385,16 @@ export class WorkspaceSync {
           throw error;
         }
         if (!Number.isSafeInteger(data)) throw Error('Invalid revision');
-        let stillDirty = JSON.stringify(readWorkspace(this.id)) !== serialized;
+        this.acceptedSnapshot = {
+          revision: data,
+          fingerprint: serialized,
+          confirmed: !hasDeletions,
+        };
+        let stillDirty =
+          workspaceFingerprint(readWorkspace(this.id)) !== serialized;
         writeMeta(this.id, { revision: data, dirty: stillDirty });
         // A write/revision alone is not a server acknowledgement of this deletion.
-        if (
-          !stillDirty &&
-          (snapshot.habits.habits.some((h) => h.deletedAt !== undefined) ||
-            snapshot.tasks.tasks.some((t) => t.deletedAt !== undefined))
-        ) {
+        if (!stillDirty && hasDeletions) {
           const readBack = await this.remote();
           if (this.stopped) return;
           const expected = snapshot.habits.habits.filter(
@@ -350,7 +423,9 @@ export class WorkspaceSync {
             writeMeta(this.id, { revision: data, dirty: true });
             throw Error('Server has not confirmed the deletion marker.');
           }
-          stillDirty = JSON.stringify(readWorkspace(this.id)) !== serialized;
+          this.acceptedSnapshot.confirmed = true;
+          stillDirty =
+            workspaceFingerprint(readWorkspace(this.id)) !== serialized;
           writeMeta(this.id, { revision: data, dirty: stillDirty });
         }
         this.notify(
@@ -496,6 +571,6 @@ export class WorkspaceSync {
     if (typeof document !== 'undefined')
       document.removeEventListener('visibilitychange', this.resumed);
     if (typeof window !== 'undefined')
-      window.removeEventListener('online', this.resumed);
+      window.removeEventListener('online', this.reconnected);
   }
 }
