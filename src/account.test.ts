@@ -15,7 +15,12 @@ import {
   parseBackup,
   workspaceFingerprint,
 } from './workspace';
-import { WorkspaceSync } from './sync';
+import {
+  WorkspaceSync,
+  SYNC_READ_TIMEOUT_MS,
+  SYNC_WRITE_TIMEOUT_MS,
+} from './sync';
+import { hasCachedWorkspace } from './workspace';
 import type { SupabaseClient } from '@supabase/supabase-js';
 let values: Map<string, string>;
 beforeEach(() => {
@@ -28,6 +33,7 @@ beforeEach(() => {
   setWorkspaceUser(null);
 });
 afterEach(() => {
+  vi.useRealTimers();
   setWorkspaceUser(null);
   vi.unstubAllGlobals();
 });
@@ -306,5 +312,199 @@ it('does not accept a revision when the server read lacks the requested deletion
   accept = true;
   await e.tick();
   expect(deletionStatus(w.habits.habits[0], id).phase).toBe('confirmed');
+  e.stop();
+});
+
+it('opens only a complete validated cache belonging to this account, never guest/partial/incoming/corrupt documents', () => {
+  storeWorkspace('guest', emptyWorkspace());
+  expect(hasCachedWorkspace('a')).toBe(false);
+  storeWorkspace('a', emptyWorkspace());
+  expect(hasCachedWorkspace('a')).toBe(true);
+  values.set('lbd-account:a:incoming', JSON.stringify(emptyWorkspace()));
+  expect(hasCachedWorkspace('a')).toBe(false);
+  values.delete('lbd-account:a:incoming');
+  values.set(scopedKey('lbd-focus-v2-tasks', 'a'), '{invalid');
+  expect(hasCachedWorkspace('a')).toBe(false);
+  expect(values.get(scopedKey('lbd-focus-v2-tasks', 'a'))).toBe('{invalid');
+});
+it('times out a hung first read, ignores its late result and allows retry without writing an empty account', async () => {
+  vi.useFakeTimers();
+  let late!: (value: unknown) => void;
+  let requests = 0;
+  const client = {
+    rpc: vi.fn(() =>
+      ++requests === 1
+        ? new Promise((resolve) => {
+            late = resolve;
+          })
+        : Promise.resolve({
+            data: { revision: 2, payload: emptyWorkspace() },
+            error: null,
+          }),
+    ),
+  } as unknown as SupabaseClient;
+  const e = new WorkspaceSync(client, 'a', vi.fn());
+  const start = e.start();
+  await vi.advanceTimersByTimeAsync(SYNC_READ_TIMEOUT_MS);
+  await start;
+  expect(e.status).toBe('error');
+  expect(e.message).toContain('phản hồi quá lâu');
+  expect(hasCachedWorkspace('a')).toBe(false);
+  late({ data: { revision: 99, payload: emptyWorkspace() }, error: null });
+  await Promise.resolve();
+  expect(hasCachedWorkspace('a')).toBe(false);
+  await e.retry();
+  expect(e.status).toBe('synced');
+  expect(readMeta('a')).toEqual({ revision: 2, dirty: false });
+  e.stop();
+});
+it.each([0, 2])(
+  'protects edits made while the initial read is pending (server revision %i)',
+  async (revision) => {
+    const original = emptyWorkspace();
+    storeWorkspace('a', original);
+    writeMeta('a', { revision: 0, dirty: false });
+    let finish!: (value: unknown) => void;
+    const client = {
+      rpc: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    } as unknown as SupabaseClient;
+    const e = new WorkspaceSync(client, 'a', vi.fn());
+    const start = e.start();
+    setWorkspaceUser('a');
+    const edited = readWorkspace('a');
+    edited.timer.settings.name = 'Edit during slow first request';
+    setItem('lbd-focus-v2-timer', JSON.stringify(edited.timer));
+    e.localChanged();
+    expect(e.status).toBe('loading');
+    finish({ data: { revision, payload: original }, error: null });
+    await start;
+    expect(readWorkspace('a').timer.settings.name).toBe(
+      'Edit during slow first request',
+    );
+    expect(readMeta('a').dirty).toBe(true);
+    expect(e.status).toBe(revision === 0 ? 'pending' : 'conflict');
+    e.stop();
+  },
+);
+it('does not rewrite or remount an identical cached workspace on startup', async () => {
+  const w = emptyWorkspace();
+  storeWorkspace('a', w);
+  writeMeta('a', { revision: 1, dirty: false });
+  const changed = vi.fn();
+  const e = new WorkspaceSync(
+    {
+      rpc: async () => ({ data: { revision: 1, payload: w }, error: null }),
+    } as unknown as SupabaseClient,
+    'a',
+    changed,
+  );
+  await e.start();
+  expect(e.status).toBe('synced');
+  expect(changed.mock.calls.every((args) => !args[2])).toBe(true);
+  expect(readWorkspace('a')).toEqual(w);
+  e.stop();
+});
+it('an upload timeout retains the dirty snapshot and releases the lock for a safe retry', async () => {
+  vi.useFakeTimers();
+  const w = emptyWorkspace();
+  w.timer.settings.name = 'Keep pending work';
+  storeWorkspace('a', w);
+  writeMeta('a', { revision: 1, dirty: true });
+  let writes = 0;
+  const rpc = vi.fn((name: string) =>
+    name === 'lbd_read_workspace'
+      ? Promise.resolve({ data: { revision: 1, payload: w }, error: null })
+      : ++writes === 1
+        ? new Promise(() => {})
+        : Promise.resolve({ data: 2, error: null }),
+  );
+  const e = new WorkspaceSync(
+    { rpc } as unknown as SupabaseClient,
+    'a',
+    vi.fn(),
+  );
+  await e.start();
+  const upload = e.tick();
+  await vi.advanceTimersByTimeAsync(SYNC_WRITE_TIMEOUT_MS);
+  await upload;
+  expect(e.status).toBe('error');
+  expect(readMeta('a')).toEqual({ revision: 1, dirty: true });
+  expect(readWorkspace('a')).toEqual(w);
+  await e.retry();
+  expect(readMeta('a')).toEqual({ revision: 2, dirty: false });
+  expect(e.status).toBe('synced');
+  e.stop();
+});
+it('stops idle polling in hidden tabs, resumes on visibility and still uploads hidden pending work', async () => {
+  vi.useFakeTimers();
+  const doc = Object.assign(new EventTarget(), {
+    visibilityState: 'hidden',
+    activeElement: null,
+  });
+  vi.stubGlobal('document', doc);
+  vi.stubGlobal('window', new EventTarget());
+  storeWorkspace('a', emptyWorkspace());
+  writeMeta('a', { revision: 1, dirty: false });
+  const rpc = vi.fn(async (name: string) =>
+    name === 'lbd_read_workspace'
+      ? { data: { revision: 1, payload: emptyWorkspace() }, error: null }
+      : { data: 2, error: null },
+  );
+  const e = new WorkspaceSync(
+    { rpc } as unknown as SupabaseClient,
+    'a',
+    vi.fn(),
+  );
+  await e.start();
+  await vi.advanceTimersByTimeAsync(9000);
+  expect(rpc).toHaveBeenCalledTimes(1);
+  doc.visibilityState = 'visible';
+  doc.dispatchEvent(new Event('visibilitychange'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(rpc).toHaveBeenCalledTimes(2);
+  doc.visibilityState = 'hidden';
+  writeMeta('a', { revision: 1, dirty: true });
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(rpc.mock.calls.some(([name]) => name === 'lbd_commit_workspace')).toBe(
+    true,
+  );
+  expect(readMeta('a').dirty).toBe(false);
+  e.stop();
+  const count = rpc.mock.calls.length;
+  doc.visibilityState = 'visible';
+  doc.dispatchEvent(new Event('visibilitychange'));
+  await vi.advanceTimersByTimeAsync(6000);
+  expect(rpc).toHaveBeenCalledTimes(count);
+});
+
+it('does not replace a warm workspace while the user is typing an unsaved form', async () => {
+  const w = emptyWorkspace();
+  storeWorkspace('a', w);
+  writeMeta('a', { revision: 1, dirty: false });
+  vi.stubGlobal(
+    'document',
+    Object.assign(new EventTarget(), {
+      activeElement: { matches: () => true, closest: () => ({}) },
+    }),
+  );
+  const remote = structuredClone(w);
+  remote.timer.settings.name = 'New server settings';
+  const e = new WorkspaceSync(
+    {
+      rpc: async () => ({
+        data: { revision: 2, payload: remote },
+        error: null,
+      }),
+    } as unknown as SupabaseClient,
+    'a',
+    vi.fn(),
+  );
+  await e.start();
+  expect(e.status).toBe('remote-waiting');
+  expect(readWorkspace('a').timer.settings.name).toBe(w.timer.settings.name);
+  expect(readMeta('a')).toEqual({ revision: 1, dirty: false });
   e.stop();
 });

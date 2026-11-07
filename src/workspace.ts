@@ -67,6 +67,22 @@ export function readWorkspace(id: string | null): Workspace {
     );
   return result;
 }
+/** Only a complete, validated account cache can open before the first server read. */
+export function hasCachedWorkspace(id: string): boolean {
+  try {
+    if (
+      localStorage.getItem(`lbd-account:${id}:incoming`) !== null ||
+      !documentKeys.every(
+        (key) => localStorage.getItem(scopedKey(key, id)) !== null,
+      )
+    )
+      return false;
+    readWorkspace(id);
+    return true;
+  } catch {
+    return false;
+  }
+}
 export function storeWorkspace(id: string, w: Workspace) {
   if (!validWorkspace(w))
     throw Error('Dữ liệu máy chủ không hợp lệ. Chưa áp dụng vào thiết bị.');

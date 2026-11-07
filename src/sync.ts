@@ -8,6 +8,7 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   backupAccount,
+  hasCachedWorkspace,
   emptyWorkspace,
   readWorkspace,
   recoverIncoming,
@@ -24,9 +25,21 @@ import {
 } from './workspaceStorage';
 export type SyncStatus =
   'loading' | 'synced' | 'pending' | 'error' | 'conflict' | 'remote-waiting';
+export const SYNC_READ_TIMEOUT_MS = 12000;
+export const SYNC_WRITE_TIMEOUT_MS = 20000;
+class SyncTimeoutError extends Error {}
 export class WorkspaceSync {
   private stopped = false;
   private busy = false;
+  private initializing = false;
+  private requests = new Set<AbortController>();
+  private resumed = () => {
+    if (
+      typeof document === 'undefined' ||
+      document.visibilityState !== 'hidden'
+    )
+      void this.tick();
+  };
   private timer: ReturnType<typeof setInterval> | undefined;
   status: SyncStatus = 'loading';
   message = 'Đang tải tài khoản…';
@@ -46,41 +59,96 @@ export class WorkspaceSync {
     this.message = message;
     this.changed(status, message, reload);
   }
-  private async remote() {
-    const { data, error } = await this.client.rpc('lbd_read_workspace');
-    if (error) throw error;
-    if (
-      !data ||
-      !Number.isSafeInteger(data.revision) ||
-      data.revision < 0 ||
-      (data.payload !== null && !validWorkspace(data.payload))
-    )
-      throw Error('Dữ liệu máy chủ không hợp lệ hoặc khác phiên bản.');
-    if (
-      data.payload &&
-      [...data.payload.tasks.tasks, ...readWorkspace(this.id).tasks.tasks].some(
-        (t: Task) => t.repeat || t.repeatSeriesId || t.deletedAt !== undefined,
-      )
-    ) {
-      const markers = await this.client.rpc('lbd_read_task_deletions');
-      if (markers.error) {
-        if (!['PGRST202', '42883'].includes(markers.error.code))
-          throw markers.error;
-      } else {
-        if (
-          !Array.isArray(markers.data) ||
-          !markers.data.every((t) => validTask(t) && t.deletedAt !== undefined)
-        )
-          throw Error('Invalid server Task tombstones.');
-        data.payload.tasks.tasks = mergeTaskTombstones(
-          data.payload.tasks.tasks,
-          markers.data,
-        );
-      }
+  private async request<T>(
+    work: (signal: AbortSignal) => Promise<T>,
+    milliseconds = SYNC_READ_TIMEOUT_MS,
+  ): Promise<T> {
+    const controller = new AbortController();
+    this.requests.add(controller);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let abort: (() => void) | undefined;
+    try {
+      return await Promise.race([
+        work(controller.signal),
+        new Promise<never>((_, reject) => {
+          abort = () => reject(new Error('Request stopped'));
+          controller.signal.addEventListener('abort', abort, { once: true });
+          timeout = setTimeout(() => {
+            reject(new SyncTimeoutError('Sync request timed out'));
+            controller.abort();
+          }, milliseconds);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+      if (abort) controller.signal.removeEventListener('abort', abort);
+      this.requests.delete(controller);
     }
-    if (!this.stopped)
-      acknowledgeHabitDeletions(this.id, data.payload?.habits.habits ?? []);
-    return data as { revision: number; payload: Workspace | null };
+  }
+  private rpc(
+    name: string,
+    signal: AbortSignal,
+    args?: Record<string, unknown>,
+  ) {
+    const call = this.client.rpc(name, args);
+    return typeof call.abortSignal === 'function'
+      ? call.abortSignal(signal)
+      : call;
+  }
+  private editing() {
+    return (
+      typeof document !== 'undefined' &&
+      document.activeElement?.matches(
+        'input,textarea,select,[contenteditable=true]',
+      ) &&
+      document.activeElement.closest('main')
+    );
+  }
+  private async remote() {
+    return this.request(async (signal) => {
+      const { data, error } = await this.rpc('lbd_read_workspace', signal);
+      if (signal.aborted || this.stopped) throw Error('Request stopped');
+      if (error) throw error;
+      if (
+        !data ||
+        !Number.isSafeInteger(data.revision) ||
+        data.revision < 0 ||
+        (data.payload !== null && !validWorkspace(data.payload))
+      )
+        throw Error('Dữ liệu máy chủ không hợp lệ hoặc khác phiên bản.');
+      if (
+        data.payload &&
+        [
+          ...data.payload.tasks.tasks,
+          ...readWorkspace(this.id).tasks.tasks,
+        ].some(
+          (t: Task) =>
+            t.repeat || t.repeatSeriesId || t.deletedAt !== undefined,
+        )
+      ) {
+        const markers = await this.rpc('lbd_read_task_deletions', signal);
+        if (signal.aborted || this.stopped) throw Error('Request stopped');
+        if (markers.error) {
+          if (!['PGRST202', '42883'].includes(markers.error.code))
+            throw markers.error;
+        } else {
+          if (
+            !Array.isArray(markers.data) ||
+            !markers.data.every(
+              (t) => validTask(t) && t.deletedAt !== undefined,
+            )
+          )
+            throw Error('Invalid server Task tombstones.');
+          data.payload.tasks.tasks = mergeTaskTombstones(
+            data.payload.tasks.tasks,
+            markers.data,
+          );
+        }
+      }
+      if (!this.stopped)
+        acknowledgeHabitDeletions(this.id, data.payload?.habits.habits ?? []);
+      return data as { revision: number; payload: Workspace | null };
+    });
   }
   private retainRemoteDeletions(payload: Workspace | null) {
     if (!payload) return false;
@@ -104,11 +172,31 @@ export class WorkspaceSync {
     return true;
   }
   async start() {
+    if (this.stopped || this.busy) return;
+    this.busy = true;
+    this.initializing = true;
+    const cached = hasCachedWorkspace(this.id);
+    this.notify(
+      'loading',
+      cached
+        ? 'Đang kiểm tra bản mới trên máy chủ; bạn có thể dùng dữ liệu đã lưu trên thiết bị.'
+        : 'Đang tải dữ liệu tài khoản từ máy chủ…',
+    );
     try {
       recoverIncoming(this.id);
-      const local = readMeta(this.id),
-        remote = await this.remote();
+      if (!cached && hasCachedWorkspace(this.id))
+        this.notify(
+          'loading',
+          'Đang kiểm tra bản mới trên máy chủ; bạn có thể dùng dữ liệu đã lưu trên thiết bị.',
+        );
+      const remote = await this.remote();
       if (this.stopped) return;
+      const local = readMeta(this.id);
+      const current = readWorkspace(this.id);
+      const same =
+        hasCachedWorkspace(this.id) &&
+        workspaceFingerprint(current) ===
+          workspaceFingerprint(remote.payload ?? emptyWorkspace());
       if (local.dirty) {
         const deletedChanged = this.retainRemoteDeletions(remote.payload);
         if (remote.revision !== local.revision)
@@ -123,31 +211,51 @@ export class WorkspaceSync {
             'Có thay đổi đang chờ đồng bộ.',
             deletedChanged,
           );
-      } else if (
-        remote.revision !== local.revision &&
-        readWorkspace(this.id).timer.snapshot.run
-      ) {
+      } else if (!same && (current.timer.snapshot.run || this.editing())) {
         this.notify(
           'remote-waiting',
-          'Có bản mới trên máy chủ nhưng Timer cục bộ đang chạy. Giữ dấu xóa vĩnh viễn; chọn bản cho các thay đổi còn lại.',
+          'Có bản mới trên máy chủ khi bạn đang dùng Timer hoặc chỉnh sửa. Giữ dấu xóa vĩnh viễn; chọn bản cho các thay đổi còn lại.',
           this.retainRemoteDeletions(remote.payload),
         );
+      } else if (same) {
+        writeMeta(this.id, { revision: remote.revision, dirty: false });
+        this.notify('synced', 'Đã kiểm tra: dữ liệu trên thiết bị đã đồng bộ.');
       } else {
         storeWorkspace(this.id, remote.payload ?? emptyWorkspace());
         writeMeta(this.id, { revision: remote.revision, dirty: false });
         this.notify('synced', 'Đã tải dữ liệu tài khoản.', true);
       }
-    } catch {
+    } catch (error) {
       this.notify(
         'error',
-        'Chưa tải được tài khoản. Bản cục bộ được giữ; kiểm tra mạng, cấu hình và migration.',
+        error instanceof SyncTimeoutError
+          ? 'Máy chủ phản hồi quá lâu. Bản cục bộ được giữ; có thể thử tải lại khi kết nối ổn định.'
+          : 'Chưa tải được tài khoản. Bản cục bộ được giữ; kiểm tra mạng, cấu hình và migration.',
       );
+    } finally {
+      this.initializing = false;
+      this.busy = false;
     }
-    if (!this.stopped) this.timer = setInterval(() => void this.tick(), 3000);
+    if (!this.stopped) {
+      this.timer = setInterval(() => {
+        if (
+          typeof document !== 'undefined' &&
+          document.visibilityState === 'hidden' &&
+          !readMeta(this.id).dirty
+        )
+          return;
+        void this.tick();
+      }, 3000);
+      if (typeof document !== 'undefined')
+        document.addEventListener('visibilitychange', this.resumed);
+      if (typeof window !== 'undefined')
+        window.addEventListener('online', this.resumed);
+    }
   }
   localChanged() {
     if (
       this.stopped ||
+      this.initializing ||
       this.status === 'conflict' ||
       this.status === 'remote-waiting'
     )
@@ -169,10 +277,14 @@ export class WorkspaceSync {
       if (meta.dirty) {
         const snapshot = readWorkspace(this.id),
           serialized = JSON.stringify(snapshot);
-        const { data, error } = await this.client.rpc('lbd_commit_workspace', {
-          expected_revision: meta.revision,
-          payload: snapshot,
-        });
+        const { data, error } = await this.request(
+          async (signal) =>
+            await this.rpc('lbd_commit_workspace', signal, {
+              expected_revision: meta.revision,
+              payload: snapshot,
+            }),
+          SYNC_WRITE_TIMEOUT_MS,
+        );
         if (this.stopped) return;
         if (error) {
           if (error.code === '40001') {
@@ -261,12 +373,7 @@ export class WorkspaceSync {
             );
             return;
           }
-          const editing =
-            typeof document !== 'undefined' &&
-            document.activeElement?.matches(
-              'input,textarea,select,[contenteditable=true]',
-            ) &&
-            document.activeElement.closest('main');
+          const editing = this.editing();
           if (readWorkspace(this.id).timer.snapshot.run || editing) {
             this.notify(
               'remote-waiting',
@@ -281,14 +388,27 @@ export class WorkspaceSync {
         } else if (this.status === 'error')
           this.notify('synced', 'Kết nối đã khôi phục.');
       }
-    } catch {
+    } catch (error) {
       this.notify(
         'error',
-        'Chưa đồng bộ được. Dữ liệu chờ gửi vẫn còn trên thiết bị; thử lại khi có mạng.',
+        error instanceof SyncTimeoutError
+          ? 'Máy chủ phản hồi quá lâu. Dữ liệu chờ gửi vẫn còn trên thiết bị; hãy thử đồng bộ lại.'
+          : 'Chưa đồng bộ được. Dữ liệu chờ gửi vẫn còn trên thiết bị; thử lại khi có mạng.',
       );
     } finally {
       this.busy = false;
     }
+  }
+  async retry() {
+    if (
+      this.stopped ||
+      this.busy ||
+      this.status === 'conflict' ||
+      this.status === 'remote-waiting'
+    )
+      return;
+    this.notify('loading', 'Đang thử kết nối lại với máy chủ…');
+    await this.tick();
   }
   async useServer() {
     if (this.busy) return;
@@ -372,5 +492,10 @@ export class WorkspaceSync {
   stop() {
     this.stopped = true;
     clearInterval(this.timer);
+    for (const request of this.requests) request.abort();
+    if (typeof document !== 'undefined')
+      document.removeEventListener('visibilitychange', this.resumed);
+    if (typeof window !== 'undefined')
+      window.removeEventListener('online', this.resumed);
   }
 }

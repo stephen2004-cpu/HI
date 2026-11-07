@@ -14,6 +14,7 @@ import {
 } from './workspaceStorage';
 import {
   backupAccount,
+  hasCachedWorkspace,
   mergeGuest,
   readWorkspace,
   storeWorkspace,
@@ -86,17 +87,14 @@ export default function AccountApp() {
       setSyncMessage('Chế độ khách — dữ liệu chỉ trên thiết bị này.');
       return;
     }
+    if (hasCachedWorkspace(id)) setReadyScope(id);
     const sync = new WorkspaceSync(supabase, id, (s, m, reload) => {
       if (!live) return;
       setStatus(s);
       setSyncMessage(m);
       try {
         readWorkspace(id);
-        if (
-          localStorage.getItem(scopedKey('lbd-focus-v2-timer', id)) !== null &&
-          localStorage.getItem(`lbd-account:${id}:incoming`) === null
-        )
-          setReadyScope(id);
+        if (hasCachedWorkspace(id)) setReadyScope(id);
       } catch {
         setReadyScope(undefined);
         setSyncMessage(
@@ -245,8 +243,8 @@ export default function AccountApp() {
               <p>{syncMessage}</p>
               <button
                 className="button outline"
-                disabled={busy}
-                onClick={() => void engine.current?.tick()}
+                disabled={busy || status === 'loading'}
+                onClick={() => void engine.current?.retry()}
               >
                 Đồng bộ ngay
               </button>
@@ -515,9 +513,24 @@ export default function AccountApp() {
       {authReady && readyScope === id ? (
         <App key={`${id ?? 'guest'}:${generation}`} />
       ) : (
-        <p role="status" className="account-loading">
-          Đang mở vùng dữ liệu…
-        </p>
+        <section className="account-loading" aria-label="Mở dữ liệu tài khoản">
+          {status === 'error' && authReady && id ? (
+            <>
+              <p role="alert">
+                {syncMessage} Chưa mở workspace vì chưa có bản tài khoản hợp lệ
+                trên thiết bị này.
+              </p>
+              <button
+                className="button outline"
+                onClick={() => void engine.current?.retry()}
+              >
+                Thử tải lại dữ liệu
+              </button>
+            </>
+          ) : (
+            <p role="status">Đang mở vùng dữ liệu…</p>
+          )}
+        </section>
       )}
     </>
   );
