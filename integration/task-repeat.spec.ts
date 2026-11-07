@@ -158,7 +158,7 @@ test('series sync two devices; missing deletion RPC refuses safely; tombstones s
     .toBe('Chỉnh riêng iPhone');
   await p.getByRole('button', { name: 'Tuần', exact: true }).click();
   await card(p, '2026-10-30')
-    .getByRole('button', { name: 'Xóa', exact: true })
+    .getByRole('button', { name: 'Sửa', exact: true })
     .click();
   await p.route('**/rest/v1/rpc/lbd_task_repeat_capabilities', (r) =>
     r.fulfill({
@@ -170,13 +170,10 @@ test('series sync two devices; missing deletion RPC refuses safely; tombstones s
       }),
     }),
   );
-  await p
-    .getByRole('group', { name: 'Xác nhận xóa Task' })
-    .getByRole('button', { name: 'Xác nhận xóa', exact: true })
-    .click();
-  await expect(
-    p.getByRole('group', { name: 'Xác nhận xóa Task' }).getByRole('alert'),
-  ).toContainText('Chưa xóa Task');
+  await p.getByRole('button', { name: 'Xóa vĩnh viễn', exact: true }).click();
+  await expect(p.locator('.task-form').getByRole('alert')).toContainText(
+    'Chưa xóa Task',
+  );
   await expect(card(p, '2026-10-30')).toHaveCount(1);
   await p.unroute('**/rest/v1/rpc/lbd_task_repeat_capabilities');
   await phone.setOffline(true);
@@ -185,10 +182,7 @@ test('series sync two devices; missing deletion RPC refuses safely; tombstones s
     .click();
   await q.locator('.task-form textarea').first().fill('Đổi offline');
   await q.getByRole('button', { name: 'Lưu Task', exact: true }).click();
-  await p
-    .getByRole('group', { name: 'Xác nhận xóa Task' })
-    .getByRole('button', { name: 'Xác nhận xóa', exact: true })
-    .click();
+  await p.getByRole('button', { name: 'Xóa vĩnh viễn', exact: true }).click();
   await expect(card(p, '2026-10-30')).toHaveCount(0);
   await expect(p.locator('.sync-status')).toHaveClass(/synced/, {
     timeout: 15000,
@@ -325,13 +319,13 @@ test('mobile Task deletion classifies capability failures and never mutates a Ta
     p = await context.newPage();
   await login(p, email, pass);
   await card(p, '2026-10-26')
-    .getByRole('button', { name: 'Xóa', exact: true })
+    .getByRole('button', { name: 'Sửa', exact: true })
     .click();
   const before = await p.evaluate(
     (user) => localStorage.getItem(`lbd-account:${user}:lbd-focus-v2-tasks`),
     user,
   );
-  const panel = p.getByRole('group', { name: 'Xác nhận xóa Task' });
+  const panel = p.locator('.task-form');
   for (const failure of [
     {
       status: 404,
@@ -363,8 +357,11 @@ test('mobile Task deletion classifies capability failures and never mutates a Ta
       }),
     );
     await panel
-      .getByRole('button', { name: 'Xác nhận xóa', exact: true })
+      .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
       .click();
+    await expect(
+      p.getByRole('group', { name: 'Xác nhận xóa Task' }),
+    ).toHaveCount(0);
     await expect(panel.getByRole('alert')).toContainText(failure.text);
     await expect(panel.getByRole('alert')).toContainText('Chưa xóa Task');
     await expect(panel.getByRole('alert')).not.toContainText('secret');

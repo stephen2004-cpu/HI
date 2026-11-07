@@ -124,7 +124,11 @@ export default function TaskBoard({
       if (!latest.error) setTasks(latest.tasks);
     };
     window.addEventListener('lbd-tasks-updated', refresh);
-    return () => window.removeEventListener('lbd-tasks-updated', refresh);
+    window.addEventListener('lbd-habits-updated', refresh);
+    return () => {
+      window.removeEventListener('lbd-tasks-updated', refresh);
+      window.removeEventListener('lbd-habits-updated', refresh);
+    };
   }, []);
   useEffect(() => {
     if (!editorOnly) onRange(range.from, range.to);
@@ -266,6 +270,84 @@ export default function TaskBoard({
       setError(e instanceof Error ? e.message : 'Không lưu được Task.');
     }
   };
+  const deleteRunning = useRef(false);
+  const removeTask = async (t: Task) => {
+    if (deleteRunning.current) return;
+    deleteRunning.current = true;
+    setDeleteError('');
+    const scope = workspaceUser(),
+      request = ++deleteRequest.current;
+    const controller = new AbortController(),
+      timeout = setTimeout(() => controller.abort(), 12000);
+    setDeleteBusy(true);
+    try {
+      if (t.repeatSeriesId && scope) {
+        const result = await supabase
+          ?.rpc('lbd_task_repeat_capabilities')
+          .abortSignal(controller.signal);
+        if (
+          !mounted.current ||
+          workspaceUser() !== scope ||
+          request !== deleteRequest.current
+        )
+          return;
+        const issue = controller.signal.aborted
+          ? 'Máy chủ phản hồi quá lâu. Chưa xóa Task; dữ liệu vẫn được giữ. Hãy thử lại.'
+          : !result
+            ? 'Chưa cấu hình kết nối Supabase. Chưa xóa Task; dữ liệu vẫn được giữ.'
+            : taskDeletionIssue(result);
+        if (issue) {
+          setDeleteError(issue);
+          return;
+        }
+      }
+      if (
+        !mounted.current ||
+        workspaceUser() !== scope ||
+        request !== deleteRequest.current
+      )
+        return;
+      const latest = readTaskStore();
+      if (latest.error) throw Error('Không đọc được Task mới nhất. Chưa xóa.');
+      const next = t.repeatSeriesId
+        ? latest.tasks.map((x) =>
+            x.id === t.id ? { ...x, deletedAt: Date.now() } : x,
+          )
+        : latest.tasks.filter((x) => x.id !== t.id);
+      const currentPlanner = loadPlanner();
+      if (currentPlanner.error) throw Error('Không đọc được lịch. Chưa xóa.');
+      const scheduled = scheduleTaskRepeats(
+        next,
+        currentPlanner.data,
+        range.from,
+        range.to,
+        taskProtectedIds(),
+      );
+      if (!persistTaskCalendar(scheduled.tasks, scheduled.planner))
+        throw Error('Không lưu được thao tác xóa. Dữ liệu cũ được giữ.');
+      setTasks(readTasks().tasks);
+      setDeleting(null);
+      setNotice(
+        t.repeatSeriesId
+          ? scope
+            ? 'Đã ghi dấu xóa Task trên thiết bị; chờ đồng bộ máy chủ.'
+            : 'Đã xóa lần Task trên thiết bị và giữ dấu xóa chống tạo lại.'
+          : 'Đã xóa Task.',
+      );
+      if (editing === t.id) {
+        setEditing(null);
+        setDraft(empty);
+        setRepeat(defaultTaskRepeat());
+      }
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Không xóa được Task.');
+    } finally {
+      clearTimeout(timeout);
+      deleteRunning.current = false;
+      if (mounted.current && request === deleteRequest.current)
+        setDeleteBusy(false);
+    }
+  };
   const taskCard = (row: TaskRow) => {
     const t = row.task;
     return (
@@ -288,7 +370,7 @@ export default function TaskBoard({
           <input
             type="checkbox"
             checked={t.completed}
-            disabled={loaded.error}
+            disabled={loaded.error || deleteBusy}
             onChange={() =>
               commit(
                 tasks.map((x) =>
@@ -373,7 +455,7 @@ export default function TaskBoard({
           <select
             aria-label={`Nhóm của ${t.title}`}
             value={t.group}
-            disabled={loaded.error}
+            disabled={loaded.error || deleteBusy}
             onChange={(e) =>
               commit(moveTask(tasks, t.id, e.target.value as Group))
             }
@@ -388,8 +470,10 @@ export default function TaskBoard({
         <div className="task-actions">
           <button
             className="button"
-            disabled={loaded.error}
+            disabled={loaded.error || deleteBusy}
             onClick={() => {
+              setDeleteError('');
+              setDeleting(null);
               setEditing(t.id);
               setDraft(repeatDraft(t));
               const root = readTaskStore().tasks.find(
@@ -404,7 +488,7 @@ export default function TaskBoard({
           </button>
           <button
             className="button"
-            disabled={loaded.error}
+            disabled={loaded.error || deleteBusy}
             onClick={() => {
               deleteRequest.current++;
               setDeleting(t.id);
@@ -440,84 +524,7 @@ export default function TaskBoard({
               className="button"
               disabled={deleteBusy}
               onClick={async () => {
-                setDeleteError('');
-                const scope = workspaceUser(),
-                  request = ++deleteRequest.current;
-                const controller = new AbortController(),
-                  timeout = setTimeout(() => controller.abort(), 12000);
-                setDeleteBusy(true);
-                try {
-                  if (t.repeatSeriesId && scope) {
-                    const result = await supabase
-                      ?.rpc('lbd_task_repeat_capabilities')
-                      .abortSignal(controller.signal);
-                    if (
-                      !mounted.current ||
-                      workspaceUser() !== scope ||
-                      request !== deleteRequest.current
-                    )
-                      return;
-                    const issue = controller.signal.aborted
-                      ? 'Máy chủ phản hồi quá lâu. Chưa xóa Task; dữ liệu vẫn được giữ. Hãy thử lại.'
-                      : !result
-                        ? 'Chưa cấu hình kết nối Supabase. Chưa xóa Task; dữ liệu vẫn được giữ.'
-                        : taskDeletionIssue(result);
-                    if (issue) {
-                      setDeleteError(issue);
-                      return;
-                    }
-                  }
-                  if (
-                    !mounted.current ||
-                    workspaceUser() !== scope ||
-                    request !== deleteRequest.current
-                  )
-                    return;
-                  const latest = readTaskStore();
-                  if (latest.error)
-                    throw Error('Không đọc được Task mới nhất. Chưa xóa.');
-                  const next = t.repeatSeriesId
-                    ? latest.tasks.map((x) =>
-                        x.id === t.id ? { ...x, deletedAt: Date.now() } : x,
-                      )
-                    : latest.tasks.filter((x) => x.id !== t.id);
-                  const currentPlanner = loadPlanner();
-                  if (currentPlanner.error)
-                    throw Error('Không đọc được lịch. Chưa xóa.');
-                  const scheduled = scheduleTaskRepeats(
-                    next,
-                    currentPlanner.data,
-                    range.from,
-                    range.to,
-                    taskProtectedIds(),
-                  );
-                  if (!persistTaskCalendar(scheduled.tasks, scheduled.planner))
-                    throw Error(
-                      'Không lưu được thao tác xóa. Dữ liệu cũ được giữ.',
-                    );
-                  setTasks(readTasks().tasks);
-                  setDeleting(null);
-                  setNotice(
-                    t.repeatSeriesId
-                      ? scope
-                        ? 'Đã ghi dấu xóa Task trên thiết bị; chờ đồng bộ máy chủ.'
-                        : 'Đã xóa lần Task trên thiết bị và giữ dấu xóa chống tạo lại.'
-                      : 'Đã xóa Task.',
-                  );
-                  if (editing === t.id) {
-                    setEditing(null);
-                    setDraft(empty);
-                    setRepeat(defaultTaskRepeat());
-                  }
-                } catch (e) {
-                  setDeleteError(
-                    e instanceof Error ? e.message : 'Không xóa được Task.',
-                  );
-                } finally {
-                  clearTimeout(timeout);
-                  if (mounted.current && request === deleteRequest.current)
-                    setDeleteBusy(false);
-                }
+                await removeTask(t);
               }}
             >
               Xác nhận xóa
@@ -626,7 +633,10 @@ export default function TaskBoard({
             </div>
             <button
               className="button primary"
+              disabled={deleteBusy}
               onClick={() => {
+                setDeleteError('');
+                setDeleting(null);
                 setEditing(null);
                 setDraft(empty);
                 setRepeat(defaultTaskRepeat());
@@ -869,7 +879,7 @@ export default function TaskBoard({
         />
         <button
           className="button primary"
-          disabled={loaded.error || (editorOnly && plannerError)}
+          disabled={loaded.error || deleteBusy || (editorOnly && plannerError)}
         >
           {editing || editorOnly ? 'Lưu Task' : 'Thêm Task'}
         </button>
@@ -878,11 +888,27 @@ export default function TaskBoard({
             Hủy
           </button>
         )}
+        {editingTask && (
+          <button
+            type="button"
+            className="button danger"
+            disabled={loaded.error || deleteBusy}
+            onClick={() => {
+              setDeleting(null);
+              void removeTask(editingTask);
+            }}
+          >
+            {deleteBusy ? 'Đang xóa…' : 'Xóa vĩnh viễn'}
+          </button>
+        )}
+        {editing && deleteError && <p role="alert">{deleteError}</p>}
         {editing && (
           <button
             type="button"
             className="button"
+            disabled={deleteBusy}
             onClick={() => {
+              setDeleteError('');
               setEditing(null);
               setDraft(empty);
               setRepeat(defaultTaskRepeat());

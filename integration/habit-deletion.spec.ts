@@ -123,9 +123,6 @@ test('permanent deletion survives offline device conflicts, use-local, refresh, 
     .getByRole('button', { name: 'Sửa thói quen Xóa an toàn', exact: true })
     .click();
   await p.getByRole('button', { name: 'Xóa vĩnh viễn', exact: true }).click();
-  await p
-    .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
-    .click();
   await expect(p.locator('.habit-table tbody tr')).toHaveCount(0);
   await expect(p.locator('.sync-status')).toContainText('Đã đồng bộ', {
     timeout: 15000,
@@ -271,9 +268,6 @@ test('history purge cannot be undone by a stale snapshot; an absent migration bl
   await page
     .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
     .click();
-  await page
-    .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
-    .click();
   await expect(
     page.getByRole('alert').filter({ hasText: 'migration' }),
   ).toBeVisible();
@@ -312,7 +306,7 @@ test('history purge cannot be undone by a stale snapshot; an absent migration bl
   await a.auth.signOut();
 });
 
-test('GYM capability failures are visible inside the mobile confirmation, preserve data and allow a safe retry', async ({
+test('GYM one-click deletion shows capability failures in the mobile editor, preserve data and allow a safe retry', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -340,10 +334,8 @@ test('GYM capability failures are visible inside the mobile confirmation, preser
   await page
     .getByRole('button', { name: 'Sửa thói quen GYM', exact: true })
     .click();
-  await page
-    .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
-    .click();
-  const dialog = page.getByRole('dialog', { name: 'Xóa vĩnh viễn thói quen?' });
+  const editor = page.locator('.habit-form');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   const before = await page.evaluate(() =>
     Object.fromEntries(
       Object.entries(localStorage).filter(
@@ -383,17 +375,18 @@ test('GYM capability failures are visible inside the mobile confirmation, preser
               body: JSON.stringify(body),
             }),
     );
-    await dialog
-      .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
+    await editor
+      .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
       .click();
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('alert')).toContainText(message);
-    await expect(dialog.getByRole('alert')).toContainText('Chưa xóa thói quen');
-    await expect(dialog.getByRole('alert')).not.toContainText(
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(editor.getByRole('alert')).toContainText(message);
+    await expect(editor.getByRole('alert')).toContainText('Chưa xóa thói quen');
+    await expect(editor.getByRole('alert')).not.toContainText(
       'private-server-details',
     );
+    await editor.getByRole('alert').scrollIntoViewIfNeeded();
     expect(
-      await dialog.getByRole('alert').evaluate((el) => {
+      await editor.getByRole('alert').evaluate((el) => {
         const r = el.getBoundingClientRect();
         return r.top >= 0 && r.bottom <= innerHeight;
       }),
@@ -411,11 +404,11 @@ test('GYM capability failures are visible inside the mobile confirmation, preser
   }
   expect((await a.rpc('lbd_read_workspace')).data).toEqual(remoteBefore);
   await page.screenshot({ path: '/tmp/lbd-habit-delete-error-mobile.png' });
-  // Same modal can retry once the actual server capability is reachable.
-  await dialog
-    .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
+  // One click in the same editor retries after the actual server capability is reachable.
+  await editor
+    .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
     .click();
-  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('.habit-table tbody tr')).toHaveCount(0);
   await expect(
     page.getByRole('status').filter({ hasText: 'Đã lưu dấu xóa' }),
@@ -451,19 +444,19 @@ test('hung capability checks time out safely and retry preserves Habit changes m
   await page
     .getByRole('button', { name: 'Sửa thói quen Xóa an toàn', exact: true })
     .click();
-  await page
-    .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
-    .click();
-  const dialog = page.getByRole('dialog', { name: 'Xóa vĩnh viễn thói quen?' });
+  const editor = page.locator('.habit-form');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   const before = (await a.rpc('lbd_read_workspace')).data;
   await page.route('**/rest/v1/rpc/lbd_habit_deletion_capabilities', () => {
     /* Intentionally leave the request pending. */
   });
-  await dialog
-    .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
+  await editor
+    .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
     .click();
-  await expect(dialog.getByRole('status')).toContainText('Đang kiểm tra');
-  await expect(dialog.getByRole('alert')).toContainText('phản hồi quá lâu', {
+  await expect(
+    editor.getByRole('button', { name: 'Đang xóa…', exact: true }),
+  ).toBeDisabled();
+  await expect(editor.getByRole('alert')).toContainText('phản hồi quá lâu', {
     timeout: 16000,
   });
   expect((await a.rpc('lbd_read_workspace')).data).toEqual(before);
@@ -482,8 +475,8 @@ test('hung capability checks time out safely and retry preserves Habit changes m
   const request = page.waitForRequest(
     '**/rest/v1/rpc/lbd_habit_deletion_capabilities',
   );
-  await dialog
-    .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
+  await editor
+    .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
     .click();
   await request;
   await page.evaluate(async () => {
@@ -502,7 +495,7 @@ test('hung capability checks time out safely and retry preserves Habit changes m
     ]);
   });
   release();
-  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(
     page.getByRole('button', {
       name: 'Sửa thói quen Giữ Habit mới',

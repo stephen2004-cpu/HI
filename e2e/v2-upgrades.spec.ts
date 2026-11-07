@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-test('permanent habit deletion retains history by default, requires a second purge confirmation and survives reload', async ({
+test('one-click habit deletion retains history and disappears across active screens; optional history purge stays protected', async ({
   page,
 }) => {
   await page.clock.setSystemTime(new Date(2026, 9, 26, 8));
@@ -29,19 +29,20 @@ test('permanent habit deletion retains history by default, requires a second pur
   await page
     .getByRole('button', { name: 'Sửa thói quen Habit cần xóa', exact: true })
     .click();
+  let confirmations = 0;
+  page.on('dialog', async (dialog) => {
+    confirmations++;
+    await dialog.dismiss();
+  });
   await page
     .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
     .click();
-  await expect(
-    page.getByLabel('Xóa cả lịch sử đánh dấu thói quen'),
-  ).not.toBeChecked();
-  await page.screenshot({
-    path: `/tmp/lbd-delete-dialog-${test.info().project.name}.png`,
-    fullPage: true,
-  });
-  await page
-    .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
-    .click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.habit-tracker')).not.toContainText(
+    'Habit cần xóa',
+  );
+  expect(confirmations).toBe(0);
+  page.removeAllListeners('dialog');
   await page.reload();
   await page.getByLabel('Hiện thói quen đã lưu trữ').check();
   await expect(
@@ -67,6 +68,27 @@ test('permanent habit deletion retains history by default, requires a second pur
     .getByRole('button', { name: 'Lịch', exact: true })
     .click();
   await expect(page.locator('.time-block')).toHaveCount(0);
+  await expect(page.locator('.calendar-screen')).not.toContainText(
+    'Habit cần xóa',
+  );
+  await page
+    .getByRole('navigation')
+    .getByRole('button', { name: 'Task', exact: true })
+    .click();
+  await expect(
+    page.locator('.task-card').filter({ hasText: 'Habit cần xóa' }),
+  ).toHaveCount(0);
+  await page
+    .getByRole('navigation')
+    .getByRole('button', { name: 'Focus', exact: true })
+    .click();
+  await expect(page.getByLabel('Task đang tập trung')).not.toContainText(
+    'Habit cần xóa',
+  );
+  await page
+    .getByRole('navigation')
+    .getByRole('button', { name: 'Lịch', exact: true })
+    .click();
   await page.getByRole('button', { name: 'Khoảng sau', exact: true }).click();
   await expect(page.locator('.time-block')).toHaveCount(0);
   await page
@@ -88,8 +110,9 @@ test('permanent habit deletion retains history by default, requires a second pur
   await page
     .getByRole('button', { name: 'Sửa thói quen Xóa cả lịch sử', exact: true })
     .click();
+  await page.getByText('Tùy chọn xóa lịch sử', { exact: true }).click();
   await page
-    .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
+    .getByRole('button', { name: 'Xóa kèm tùy chọn lịch sử', exact: true })
     .click();
   await page.getByLabel('Xóa cả lịch sử đánh dấu thói quen').check();
   page.once('dialog', (d) => d.dismiss());

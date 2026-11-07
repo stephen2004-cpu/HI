@@ -35,7 +35,7 @@ test('an incoming tombstone hides a mounted Habit table and stale editing cannot
   expect(dead.id).toBe(JSON.parse(stored!).habits[0].id);
 });
 
-test('failed local tombstone write stays in the confirmation and preserves the Habit document', async ({
+test('failed one-click local tombstone write stays in the editor and preserves the Habit document', async ({
   page,
 }) => {
   await page.goto('/#Thói%20quen');
@@ -60,18 +60,14 @@ test('failed local tombstone write stays in the confirmation and preserves the H
   await page
     .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
     .click();
-  const dialog = page.getByRole('dialog', { name: 'Xóa vĩnh viễn thói quen?' });
-  await dialog
-    .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
-    .click();
-  await expect(dialog.getByRole('alert')).toContainText(
+  const editor = page.locator('.habit-form');
+  await expect(editor.getByRole('alert')).toContainText(
     'Không lưu được dấu xóa',
   );
-  await expect(dialog).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(
     await page.evaluate(() => localStorage.getItem('lbd-focus-v2-habits')),
   ).toBe(before);
-  await dialog.getByRole('button', { name: 'Hủy xóa', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Sửa thói quen GYM', exact: true }),
   ).toBeVisible();

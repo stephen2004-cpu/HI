@@ -6,7 +6,7 @@ import {
   mergeTaskTombstones,
   type TaskRepeat,
 } from './taskRecurrence';
-import { validDate } from './habits';
+import { validDate, loadHabits } from './habits';
 export type { ChecklistStep } from './checklist';
 export const groups = [
   {
@@ -158,10 +158,21 @@ export function taskProtectedIds() {
 }
 export function readTasks(): { tasks: Task[]; error: boolean } {
   const stored = readTaskStore();
+  // A deleted Habit must also disappear from active Task/Focus pickers.
+  const habits = loadHabits();
+  const deletedHabits = new Set(
+    habits.error
+      ? []
+      : habits.habits.filter((h) => h.deletedAt !== undefined).map((h) => h.id),
+  );
   return {
     tasks: stored.error
       ? []
-      : visibleTaskInstances(stored.tasks, new Date(), taskProtectedIds()),
+      : visibleTaskInstances(
+          stored.tasks,
+          new Date(),
+          taskProtectedIds(),
+        ).filter((t) => !t.habitId || !deletedHabits.has(t.habitId)),
     error: stored.error,
   };
 }
@@ -189,10 +200,11 @@ export function writeTaskStore(tasks: Task[]): boolean {
 export function writeTasks(tasks: Task[]): boolean {
   const stored = readTaskStore();
   if (stored.error) return false;
+  // Visible-only edits must retain hidden occurrences and their historical data.
   const kept = stored.tasks.filter(
     (t) =>
       !tasks.some((x) => x.id === t.id) &&
-      (t.repeat || t.repeatSeriesId || t.deletedAt !== undefined),
+      (t.repeat || t.repeatSeriesId || t.habitId || t.deletedAt !== undefined),
   );
   const next = tasks.map((t) => {
     const old = stored.tasks.find((x) => x.id === t.id);

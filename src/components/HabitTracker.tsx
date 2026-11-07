@@ -130,6 +130,73 @@ export default function HabitTracker({
     setError('');
     return true;
   };
+  const deleteRunning = useRef(false);
+  const removeHabit = async (id: string, erase = false) => {
+    const scope = workspaceUser();
+    setDeletionError('');
+    if (deleteRunning.current) return;
+    deleteRunning.current = true;
+    setDeletingBusy(true);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    try {
+      if (scope) {
+        if (!supabase) {
+          setDeletionError(
+            'Chưa cấu hình kết nối Supabase. Chưa xóa thói quen; dữ liệu vẫn được giữ.',
+          );
+          return;
+        }
+        const result = await supabase
+          .rpc('lbd_habit_deletion_capabilities')
+          .abortSignal(controller.signal);
+        if (!mounted.current || workspaceUser() !== scope) return;
+        const issue = controller.signal.aborted
+          ? 'Máy chủ phản hồi quá lâu. Chưa xóa thói quen; hãy kiểm tra mạng rồi thử lại.'
+          : habitDeletionIssue(result);
+        if (issue) {
+          setDeletionError(issue);
+          return;
+        }
+      }
+      if (!mounted.current || workspaceUser() !== scope) return;
+      // Re-read after awaiting RPC: another operation may have updated the workspace.
+      const latest = loadHabits();
+      if (latest.error || !latest.habits.some((h) => h.id === id)) {
+        setDeletionError(
+          'Không đọc được thói quen cần xóa trong dữ liệu mới nhất. Chưa thay đổi dữ liệu; hãy đóng bảng và kiểm tra lại.',
+        );
+        return;
+      }
+      if (
+        !commit(
+          latest.habits.map((h) => (h.id === id ? deleteHabit(h, erase) : h)),
+        )
+      ) {
+        setDeletionError(
+          'Không lưu được dấu xóa trên thiết bị. Chưa xóa thói quen; kiểm tra quyền hoặc dung lượng lưu trữ rồi thử lại.',
+        );
+        return;
+      }
+      setDeleting(null);
+      setEditing(null);
+      setDraft(blank);
+      setNotice(
+        scope
+          ? 'Đã lưu dấu xóa và ẩn thói quen trên thiết bị này. Hãy chờ trạng thái Đã đồng bộ trước khi kiểm tra trên thiết bị khác. Nếu đồng bộ lỗi, dấu xóa vẫn chờ gửi trên thiết bị này.'
+          : 'Đã xóa thói quen trên thiết bị này. Dữ liệu khách chưa được đồng bộ lên tài khoản.',
+      );
+    } catch {
+      if (mounted.current && workspaceUser() === scope)
+        setDeletionError(
+          'Chưa kết nối được máy chủ để bảo vệ dấu xóa. Chưa xóa thói quen; dữ liệu vẫn được giữ. Hãy thử lại khi có mạng.',
+        );
+    } finally {
+      clearTimeout(timeout);
+      deleteRunning.current = false;
+      if (mounted.current && workspaceUser() === scope) setDeletingBusy(false);
+    }
+  };
   return (
     <section className="habit-tracker">
       <div className="habit-heading">
@@ -388,7 +455,7 @@ export default function HabitTracker({
         </fieldset>
         <button
           className="button primary"
-          disabled={loaded.error || !draft.days.length}
+          disabled={loaded.error || deletingBusy || !draft.days.length}
         >
           <Plus size={16} />
           {editing ? 'Lưu thói quen' : 'Tạo thói quen'}
@@ -397,7 +464,9 @@ export default function HabitTracker({
           <button
             type="button"
             className="button outline"
+            disabled={deletingBusy}
             onClick={() => {
+              setDeletionError('');
               setEditing(null);
               setDraft(blank);
               setAutomatic(true);
@@ -415,16 +484,34 @@ export default function HabitTracker({
           <button
             type="button"
             className="button danger"
-            disabled={loaded.error}
-            onClick={() => {
-              setDeleting(editing);
-              setEraseHistory(false);
-              setDeletionError('');
-              setNotice('');
-            }}
+            disabled={loaded.error || deletingBusy}
+            onClick={() => void removeHabit(editing)}
           >
-            Xóa vĩnh viễn
+            {deletingBusy ? 'Đang xóa…' : 'Xóa vĩnh viễn'}
           </button>
+        )}
+        {!deleting && deletionError && (
+          <p role="alert" className="habit-deletion-error">
+            {deletionError}
+          </p>
+        )}
+        {editing && (
+          <details>
+            <summary>Tùy chọn xóa lịch sử</summary>
+            <button
+              type="button"
+              className="button danger"
+              disabled={loaded.error || deletingBusy}
+              onClick={() => {
+                setDeleting(editing);
+                setEraseHistory(false);
+                setDeletionError('');
+                setNotice('');
+              }}
+            >
+              Xóa kèm tùy chọn lịch sử
+            </button>
+          </details>
         )}
       </form>
       {deleting && (
@@ -504,73 +591,7 @@ export default function HabitTracker({
                   )
                 )
                   return;
-                const scope = workspaceUser();
-                setDeletionError('');
-                setDeletingBusy(true);
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 12000);
-                try {
-                  if (scope) {
-                    if (!supabase) {
-                      setDeletionError(
-                        'Chưa cấu hình kết nối Supabase. Chưa xóa thói quen; dữ liệu vẫn được giữ.',
-                      );
-                      return;
-                    }
-                    const result = await supabase
-                      .rpc('lbd_habit_deletion_capabilities')
-                      .abortSignal(controller.signal);
-                    if (!mounted.current || workspaceUser() !== scope) return;
-                    const issue = controller.signal.aborted
-                      ? 'Máy chủ phản hồi quá lâu. Chưa xóa thói quen; hãy kiểm tra mạng rồi thử lại.'
-                      : habitDeletionIssue(result);
-                    if (issue) {
-                      setDeletionError(issue);
-                      return;
-                    }
-                  }
-                  if (!mounted.current || workspaceUser() !== scope) return;
-                  // Re-read after awaiting RPC: another operation may have updated the workspace.
-                  const latest = loadHabits();
-                  if (
-                    latest.error ||
-                    !latest.habits.some((h) => h.id === deleting)
-                  ) {
-                    setDeletionError(
-                      'Không đọc được thói quen cần xóa trong dữ liệu mới nhất. Chưa thay đổi dữ liệu; hãy đóng bảng và kiểm tra lại.',
-                    );
-                    return;
-                  }
-                  if (
-                    !commit(
-                      latest.habits.map((h) =>
-                        h.id === deleting ? deleteHabit(h, eraseHistory) : h,
-                      ),
-                    )
-                  ) {
-                    setDeletionError(
-                      'Không lưu được dấu xóa trên thiết bị. Chưa xóa thói quen; kiểm tra quyền hoặc dung lượng lưu trữ rồi thử lại.',
-                    );
-                    return;
-                  }
-                  setDeleting(null);
-                  setEditing(null);
-                  setDraft(blank);
-                  setNotice(
-                    scope
-                      ? 'Đã lưu dấu xóa và ẩn thói quen trên thiết bị này. Hãy chờ trạng thái Đã đồng bộ trước khi kiểm tra trên thiết bị khác. Nếu đồng bộ lỗi, dấu xóa vẫn chờ gửi trên thiết bị này.'
-                      : 'Đã xóa thói quen trên thiết bị này. Dữ liệu khách chưa được đồng bộ lên tài khoản.',
-                  );
-                } catch {
-                  if (mounted.current && workspaceUser() === scope)
-                    setDeletionError(
-                      'Chưa kết nối được máy chủ để bảo vệ dấu xóa. Chưa xóa thói quen; dữ liệu vẫn được giữ. Hãy thử lại khi có mạng.',
-                    );
-                } finally {
-                  clearTimeout(timeout);
-                  if (mounted.current && workspaceUser() === scope)
-                    setDeletingBusy(false);
-                }
+                await removeHabit(deleting, eraseHistory);
               }}
             >
               Xác nhận xóa vĩnh viễn
@@ -596,7 +617,7 @@ export default function HabitTracker({
                   role={status.phase === 'error' ? 'alert' : 'status'}
                   data-deletion-phase={status.phase}
                 >
-                  <strong>{h.name} · </strong>
+                  <strong>Thói quen đã xóa · </strong>
                   {status.text}
                 </p>
               );
@@ -705,8 +726,9 @@ export default function HabitTracker({
                       <button
                         className="habit-edit"
                         aria-label={`Sửa thói quen ${h.name}`}
-                        disabled={loaded.error}
+                        disabled={loaded.error || deletingBusy}
                         onClick={() => {
+                          setDeletionError('');
                           setEditing(h.id);
                           setDraft({ ...h });
                           const ending = h.recurrence?.rules.at(-1)?.ending;
@@ -840,7 +862,7 @@ export default function HabitTracker({
               {recurrenceState(h) === 'active' && (
                 <button
                   className="button outline"
-                  disabled={loaded.error}
+                  disabled={loaded.error || deletingBusy}
                   onClick={() =>
                     commit(
                       habits.map((x) => (x.id === h.id ? pauseHabit(x) : x)),
@@ -853,7 +875,7 @@ export default function HabitTracker({
               {recurrenceState(h) === 'paused' && (
                 <button
                   className="button outline"
-                  disabled={loaded.error}
+                  disabled={loaded.error || deletingBusy}
                   onClick={() =>
                     commit(
                       habits.map((x) => (x.id === h.id ? resumeHabit(x) : x)),
@@ -866,7 +888,7 @@ export default function HabitTracker({
               {['active', 'paused'].includes(recurrenceState(h)) && (
                 <button
                   className="button outline"
-                  disabled={loaded.error}
+                  disabled={loaded.error || deletingBusy}
                   onClick={() => {
                     if (
                       window.confirm(
@@ -899,7 +921,7 @@ export default function HabitTracker({
               </button>
               <button
                 className="text-button"
-                disabled={loaded.error}
+                disabled={loaded.error || deletingBusy}
                 onClick={() => {
                   if (
                     window.confirm(
@@ -921,7 +943,7 @@ export default function HabitTracker({
             <button
               key={h.id}
               className="button outline"
-              disabled={loaded.error}
+              disabled={loaded.error || deletingBusy}
               onClick={() =>
                 commit(habits.map((x) => (x.id === h.id ? restoreHabit(x) : x)))
               }

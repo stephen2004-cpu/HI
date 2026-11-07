@@ -186,11 +186,9 @@ test('one save schedules exactly four Tue/Fri occurrences at 15:00–17:15 with 
     ),
   ).toBe(true);
   await page.getByRole('button', { name: 'Tuần', exact: true }).click();
-  const first = page
-    .locator('.task-card')
-    .filter({
-      has: page.locator('.task-repeat-badge', { hasText: '2026-11-03' }),
-    });
+  const first = page.locator('.task-card').filter({
+    has: page.locator('.task-repeat-badge', { hasText: '2026-11-03' }),
+  });
   await first.getByRole('checkbox').check();
   const after = await saved(page);
   expect(
@@ -216,4 +214,35 @@ test('one save schedules exactly four Tue/Fri occurrences at 15:00–17:15 with 
   ).toHaveValue(friday.id);
   await page.reload();
   expect((await saved(page)).blocks).toHaveLength(4);
+});
+
+test('one click in the Task editor deletes its active card and automatic Calendar block without a confirmation', async ({
+  page,
+}) => {
+  await create(page);
+  const before = await saved(page);
+  await page.getByRole('button', { name: 'Sửa', exact: true }).click();
+  let confirmations = 0;
+  page.on('dialog', async (dialog) => {
+    confirmations++;
+    await dialog.dismiss();
+  });
+  await page
+    .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
+    .click();
+  await expect(
+    page.getByRole('group', { name: 'Xác nhận xóa Task' }),
+  ).toHaveCount(0);
+  await expect(page.locator('.task-card')).toHaveCount(0);
+  expect(confirmations).toBe(0);
+  await page.goto('/#Lịch');
+  await expect(page.locator('.time-block')).toHaveCount(0);
+  await expect(page.locator('.calendar-screen')).not.toContainText('Học VNR');
+  await page.reload();
+  await expect(page.locator('.time-block')).toHaveCount(0);
+  expect(
+    (await saved(page)).tasks.some(
+      (t: { id: string }) => t.id === before.tasks[0].id,
+    ),
+  ).toBe(false);
 });

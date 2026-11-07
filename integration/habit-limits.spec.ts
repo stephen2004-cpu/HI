@@ -147,7 +147,6 @@ test('finite Habit rules sync across two devices without duplicate occurrences a
       exact: true,
     })
     .click();
-  await p.getByRole('button', { name: 'Xóa vĩnh viễn', exact: true }).click();
   await p.route('**/rest/v1/rpc/lbd_read_workspace', (route) =>
     route.fulfill({
       status: 503,
@@ -155,9 +154,7 @@ test('finite Habit rules sync across two devices without duplicate occurrences a
       body: JSON.stringify({ message: 'local test read unavailable' }),
     }),
   );
-  await p
-    .getByRole('button', { name: 'Xác nhận xóa vĩnh viễn', exact: true })
-    .click();
+  await p.getByRole('button', { name: 'Xóa vĩnh viễn', exact: true }).click();
   await expect(p.locator('[data-deletion-phase="error"]')).toContainText(
     'chưa xác nhận trên máy chủ',
     { timeout: 15000 },

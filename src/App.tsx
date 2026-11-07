@@ -88,7 +88,10 @@ export default function App() {
   );
   const [habitState, setHabitState] = useState(loadHabits);
   useEffect(() => {
-    const refresh = () => setHabitState(loadHabits());
+    const refresh = () => {
+      setHabitState(loadHabits());
+      setTaskState(readTasks());
+    };
     window.addEventListener('lbd-habits-updated', refresh);
     return () => window.removeEventListener('lbd-habits-updated', refresh);
   }, []);

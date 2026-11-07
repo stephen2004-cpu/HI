@@ -117,12 +117,14 @@ test('deleted occurrences never regenerate and a nonmatching start respects an i
 }) => {
   await make(page);
   await card(page, '2026-10-28')
-    .getByRole('button', { name: 'Xóa', exact: true })
+    .getByRole('button', { name: 'Sửa', exact: true })
     .click();
   await page
-    .getByRole('group', { name: 'Xác nhận xóa Task' })
-    .getByRole('button', { name: 'Xác nhận xóa', exact: true })
+    .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
     .click();
+  await expect(
+    page.getByRole('group', { name: 'Xác nhận xóa Task' }),
+  ).toHaveCount(0);
   await expect(page.locator('.task-card')).toHaveCount(2);
   await page.reload();
   await page.getByRole('button', { name: 'Tuần', exact: true }).click();
