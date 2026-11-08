@@ -43,4 +43,14 @@ Không tuyên bố đã mở lại dịch vụ thật hoặc sửa dứt điểm
 
 Với fixture 1.007 bản ghi con không đổi: hàm cũ tạo **1.007 DELETE + 1.007 INSERT**; bản mới tạo **0 DELETE + 0 INSERT + 0 UPDATE** trên các bảng con. Header workspace vẫn giữ quy tắc tăng revision đã có. Đây là số lần ghi đo ở local, không phải số đo phần trăm CPU hay latency của project thật.
 
-Kết quả trên bản sửa này: build thành công, **142/142 unit**, **120/120 kiểm thử giao diện**, **27/27 kiểm thử tích hợp Auth/sync** và **7/7 nhóm SQL** đạt. Bộ tích hợp chạy với RPC incremental đã cài trong backend Docker cục bộ; gồm đồng bộ hai tài khoản/thiết bị, offline/reconnect và bảo vệ xóa Habit/Task. Truy vấn kiểm chứng chỉ đọc trả **11/11 cờ true** tại backend này. Các kiểm thử trình duyệt dùng Chromium desktop/mobile; chưa kiểm tra Safari/iPhone thật hoặc độ trễ/CPU Supabase thật.
+Kết quả ở commit `0deb73f`: build thành công, **142/142 unit**, **120/120 kiểm thử giao diện**, **27/27 kiểm thử tích hợp Auth/sync** và **7/7 nhóm SQL** đạt. Bộ tích hợp chạy với RPC incremental đã cài trong backend Docker cục bộ; gồm đồng bộ hai tài khoản/thiết bị, offline/reconnect và bảo vệ xóa Habit/Task. Truy vấn kiểm chứng chỉ đọc trả **11/11 cờ true** tại backend này. Các kiểm thử trình duyệt dùng Chromium desktop/mobile; chưa kiểm tra Safari/iPhone thật hoặc độ trễ/CPU Supabase thật.
+
+## Cập nhật vận hành và sửa trạng thái retry — 08/11/2026
+
+Chủ dự án đã phê duyệt, chạy installer incremental và cung cấp kết quả thành công cùng hai ảnh diagnostics đủ **11/11 cờ true** trên project thật. Sau đó API vẫn trả `PGRST002`; log PostgREST còn có `PGRST003` (timeout chờ kết nối từ pool). Chủ dự án phê duyệt và thực hiện restart project, Dashboard trở lại Healthy nhưng ảnh vẫn hiển thị CPU 100%. Healthy không xác nhận mọi API đã phục hồi. Không có kết nối trực tiếp từ phiên cloud để đo độc lập.
+
+Ảnh app sau restart tiếp tục đứng ở “Đang thử kết nối lại…”. Tái hiện cục bộ tìm thấy một lỗi frontend độc lập: `retry()` đặt trạng thái loading nhưng nhánh đọc thành công cùng revision chỉ hoàn tất nếu trạng thái trước đó là error. Vì vậy một yêu cầu đã thành công vẫn có thể để nút bị khóa. Sửa nhánh này để hoàn tất loading khi đọc thành công, đồng thời kiểm tra dirty mới phát sinh trong lúc đọc và giữ trạng thái pending cho chỉnh sửa đó. Không thay SQL, API hoặc giao diện chức năng.
+
+Ba regression unit thất bại trên code cũ và đạt sau sửa. Bản sửa đạt **145/145 unit**, build và **6/6 kiểm thử tích hợp startup/retry** với backend incremental Docker, trên Chromium desktop/mobile. Bộ tích hợp kiểm tra retry dữ liệu cùng revision, lỗi 503 tạm thời rồi phục hồi, không ghi thừa hoặc tăng revision, giữ Task cũ và bảo vệ cache/chỉnh sửa trong lúc tải. Không chạy lại toàn bộ bộ giao diện/tích hợp; các số ở commit trước vẫn là kết quả trước đó.
+
+Chưa xác nhận sync, CPU hoặc xóa trên môi trường thật sau restart. Khi mở Preview mới để kiểm tra, giữ tab/origin cũ và bản cục bộ có thay đổi chưa đồng bộ; LocalStorage không tự chuyển giữa các hostname deployment.

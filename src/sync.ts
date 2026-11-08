@@ -460,8 +460,13 @@ export class WorkspaceSync {
           storeWorkspace(this.id, remote.payload ?? emptyWorkspace());
           writeMeta(this.id, { revision: remote.revision, dirty: false });
           this.notify('synced', 'Đã nhận dữ liệu từ thiết bị khác.', true);
-        } else if (this.status === 'error')
-          this.notify('synced', 'Kết nối đã khôi phục.');
+        } else if (readMeta(this.id).dirty) {
+          this.notify('pending', 'Có thay đổi mới đang chờ gửi.');
+        } else if (this.status === 'error' || this.status === 'loading')
+          this.notify(
+            'synced',
+            'Đã kiểm tra: dữ liệu trên thiết bị đã đồng bộ.',
+          );
       }
     } catch (error) {
       this.notify(

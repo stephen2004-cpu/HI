@@ -411,6 +411,78 @@ it('does not rewrite or remount an identical cached workspace on startup', async
   expect(readWorkspace('a')).toEqual(w);
   e.stop();
 });
+it.each([false, true])(
+  'finishes manual retry when a cached workspace has the same server revision (initial read failed: %s)',
+  async (initialFailure) => {
+    const w = emptyWorkspace();
+    storeWorkspace('a', w);
+    writeMeta('a', { revision: 1, dirty: false });
+    let reads = 0;
+    const rpc = vi.fn(async (_name: string) =>
+      initialFailure && ++reads === 1
+        ? { data: null, error: { code: 'PGRST002' } }
+        : { data: { revision: 1, payload: w }, error: null },
+    );
+    const changed = vi.fn();
+    const e = new WorkspaceSync(
+      { rpc } as unknown as SupabaseClient,
+      'a',
+      changed,
+    );
+    try {
+      await e.start();
+      expect(e.status).toBe(initialFailure ? 'error' : 'synced');
+      await e.retry();
+      expect(e.status).toBe('synced');
+      await e.retry();
+      expect(e.status).toBe('synced');
+      expect(readMeta('a')).toEqual({ revision: 1, dirty: false });
+      expect(readWorkspace('a')).toEqual(w);
+      expect(
+        rpc.mock.calls.every(([name]) => name === 'lbd_read_workspace'),
+      ).toBe(true);
+      expect(changed.mock.calls.every((args) => !args[2])).toBe(true);
+    } finally {
+      e.stop();
+    }
+  },
+);
+it('keeps an edit pending when it is saved during an unchanged-revision retry', async () => {
+  const w = emptyWorkspace();
+  storeWorkspace('a', w);
+  writeMeta('a', { revision: 1, dirty: false });
+  let finish!: (value: unknown) => void;
+  let reads = 0;
+  const rpc = vi.fn((_name: string) =>
+    ++reads === 1
+      ? Promise.resolve({ data: { revision: 1, payload: w }, error: null })
+      : new Promise((resolve) => {
+          finish = resolve;
+        }),
+  );
+  const e = new WorkspaceSync(
+    { rpc } as unknown as SupabaseClient,
+    'a',
+    vi.fn(),
+  );
+  try {
+    await e.start();
+    const retry = e.retry();
+    setWorkspaceUser('a');
+    const edited = readWorkspace('a');
+    edited.timer.settings.name = 'Keep edit made during retry';
+    setItem('lbd-focus-v2-timer', JSON.stringify(edited.timer));
+    finish({ data: { revision: 1, payload: w }, error: null });
+    await retry;
+    expect(e.status).toBe('pending');
+    expect(readMeta('a')).toEqual({ revision: 1, dirty: true });
+    expect(readWorkspace('a').timer.settings.name).toBe(
+      'Keep edit made during retry',
+    );
+  } finally {
+    e.stop();
+  }
+});
 it('an upload timeout retains the dirty snapshot and releases the lock for a safe retry', async () => {
   vi.useFakeTimers();
   const w = emptyWorkspace();

@@ -54,6 +54,69 @@ for (const mobile of [false, true]) {
           }
         : { viewport: { width: 1440, height: 1000 } },
     );
+    test('manual sync finishes with unchanged server data and recovers from a temporary API failure', async ({
+      page,
+    }) => {
+      const { a, email, password, user } = await fixture();
+      await login(page, email, password);
+      await expect(page.locator('.sync-status')).toHaveClass(/synced/, {
+        timeout: 15000,
+      });
+      await page.clock.install();
+      await page.clock.pauseAt(new Date());
+      let unavailable = false;
+      let reads = 0;
+      let writes = 0;
+      await page.route('**/rest/v1/rpc/lbd_commit_workspace', (route) => {
+        writes++;
+        return route.continue();
+      });
+      await page.route('**/rest/v1/rpc/lbd_read_workspace', (route) => {
+        reads++;
+        return unavailable
+          ? route.fulfill({
+              status: 503,
+              contentType: 'application/json',
+              body: JSON.stringify({
+                code: 'PGRST002',
+                details: null,
+                hint: null,
+                message:
+                  'Could not query the database for the schema cache. Retrying.',
+              }),
+            })
+          : route.continue();
+      });
+      const before = (await a.rpc('lbd_read_workspace')).data;
+      const retry = page.getByRole('button', {
+        name: 'Đồng bộ ngay',
+        exact: true,
+      });
+      await retry.click();
+      await expect.poll(() => reads).toBe(1);
+      await expect(page.locator('.sync-status')).toHaveClass(/synced/);
+      await expect(retry).toBeEnabled();
+      unavailable = true;
+      await retry.click();
+      await expect(page.locator('.sync-status')).toHaveClass(/error/);
+      unavailable = false;
+      await retry.click();
+      await expect(page.locator('.sync-status')).toHaveClass(/synced/);
+      await expect(retry).toBeEnabled();
+      expect(reads).toBe(3);
+      expect(writes).toBe(0);
+      expect((await a.rpc('lbd_read_workspace')).data).toEqual(before);
+      expect(
+        await page.evaluate(
+          (id) => JSON.parse(localStorage.getItem(`lbd-account:${id}:sync`)!),
+          user,
+        ),
+      ).toEqual({ revision: before.revision, dirty: false });
+      await expect(
+        page.getByRole('checkbox', { name: 'Giữ công việc cũ', exact: true }),
+      ).toBeVisible();
+      await a.auth.signOut();
+    });
     test('a stalled first RPC shows an actionable timeout, keeps the account locked and recovers by retry', async ({
       page,
     }) => {
