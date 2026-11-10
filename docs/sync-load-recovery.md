@@ -1,5 +1,7 @@
 # Giảm tải ghi workspace và quy trình khôi phục dịch vụ
 
+**Cập nhật 10/11/2026:** đã tái hiện vòng lặp retry SQLSTATE `40001` trên PostgREST 14.18. Bản incremental dưới đây giảm ghi thừa nhưng chưa sửa nguyên nhân đó. Xem [bản sửa conflict retry](workspace-conflict-retry.md) cùng installer riêng, đang chờ phê duyệt cho Database thật.
+
 ## Bằng chứng và giới hạn
 
 Ảnh Supabase thật do chủ dự án cung cấp cho thấy CPU cao, RPC đọc workspace trả HTTP 504, nhiều lượt `commit_workspace` hoạt động đồng thời và có thời điểm chờ khóa. Ảnh tiếp theo không còn root blocker; không đủ cơ sở hủy/terminate các PID. `running_seconds = 0` không chứng minh có truy vấn chạy lâu. Chưa có quyền kết nối Database thật trong phiên cloud này.

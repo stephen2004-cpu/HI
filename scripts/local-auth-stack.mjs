@@ -249,6 +249,26 @@ docker(
     'utf8',
   ),
 );
+// Match the production API version and the reviewed commit protections. Testing
+// only v16 hid v14's automatic retry of user-raised serialization failures.
+for (const file of [
+  '../supabase/manual/install_workspace_incremental_sync_safe.sql',
+  '../supabase/manual/fix_workspace_conflict_retry_safe.sql',
+]) {
+  docker(
+    [
+      'exec',
+      '-i',
+      'lbd-auth-pg',
+      'psql',
+      '-U',
+      'postgres',
+      '-v',
+      'ON_ERROR_STOP=1',
+    ],
+    readFileSync(new URL(file, import.meta.url), 'utf8'),
+  );
+}
 docker([
   'run',
   '-d',
@@ -266,7 +286,7 @@ docker([
     PGRST_JWT_SECRET: jwtSecret,
     PGRST_SERVER_PORT: '3000',
   }),
-  'postgrest/postgrest:v16.5',
+  'postgrest/postgrest:v14.18',
 ]);
 writeFileSync(
   `${root}/public.json`,
