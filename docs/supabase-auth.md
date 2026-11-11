@@ -92,10 +92,12 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e
 ```
 
 Live local integration prerequisites: Docker with the official images
-`postgres:15-alpine`, `supabase/gotrue:v2.197.0`, `postgrest/postgrest:v16.5`.
+`postgres:15-alpine`, `supabase/gotrue:v2.197.0`, `postgrest/postgrest:v14.18`.
 This is a minimal self-hosted Supabase Auth/PostgREST test stack, not a managed
 Supabase project. The script uses its own named containers and generated local
 credentials, creates local-only test users and applies the real migration.
+It also installs the incremental commit and non-retrying conflict protection;
+the PostgREST version matches the managed project's observed API version.
 It does not use cloud credentials. Do not reuse its test gateway in production.
 
 ```bash
@@ -129,6 +131,16 @@ docker network rm lbd-auth-test
 Stop the `local-auth-stack.mjs` process as well. Restarting the script resets
 only these isolated test containers and their test users. Do not use their
 names for an unrelated database.
+
+The `V2 regression` GitHub Actions workflow runs unit/build, the SQL safety and
+retry suites, two-device integration, and desktop/mobile UI for pushes and PRs
+targeting `feature/lbd-focus-v2`. It uses disposable local credentials and needs
+no Supabase cloud secrets. Checks report pass/fail; they do not configure Vercel
+deployment gates, branch protection, or modify the managed database.
+CI also runs core UI smoke tests against built `dist/` with Vite Preview:
+`npm run build` then `npx playwright test --config=playwright.preview.config.ts`.
+The full dev suite remains separate because it includes a Vite source-module
+fixture for simulating an incoming deletion marker in an already mounted UI.
 
 ## Password recovery (V2)
 

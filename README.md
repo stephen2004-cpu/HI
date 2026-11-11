@@ -34,6 +34,12 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e
 
 Playwright kiểm tra ở desktop 1440 × 1100 và mobile giả lập 390 × 844. Kết quả/ảnh chụp được tạo trong `test-results/` (không đưa lên Git). Bộ kiểm thử chạy các phiên **2 giây** thật: hoàn thành, chuyển phiên, lặp, bỏ qua, tạm dừng/tiếp tục, khởi động lại, dừng sớm, tải lại trang, xuất CSV và xóa lịch sử. Kiểm tra khôi phục quá hạn dùng dữ liệu LocalStorage với deadline đã hết. Đây là kiểm thử Chromium, không thay thế thử trên iPhone/Safari hay thiết bị vật lý.
 
+### Kiểm tra trước khi cập nhật V2
+
+Workflow [V2 regression](.github/workflows/v2-regression.yml) kiểm thử tự động mỗi lần push lên nhánh `feature/lbd-focus-v2` hoặc mở PR vào nhánh này. Nó chạy unit/build, kiểm tra SQL bảo vệ dữ liệu và vòng lặp retry, đồng bộ hai thiết bị trên PostgREST **14.18**, kiểm tra đầy đủ giao diện desktop/mobile và thử các luồng chính từ bản build `dist/`. Toàn bộ backend kiểm thử dùng Docker và dữ liệu giả, không cần secrets của Supabase thật.
+
+Chỉ chuyển sang Preview cập nhật sau khi checks đã xanh và xác nhận đồng bộ; giữ địa chỉ đang ổn định trên Mac/iPhone trong lúc chờ. Preview ở hostname khác có LocalStorage riêng, nên giữ/export các thay đổi chưa đồng bộ trước khi đổi địa chỉ. Workflow báo kết quả kiểm thử, không tự chặn Vercel tạo Preview và không thay cấu hình Production/branch protection. SQL thật vẫn cần chủ dự án phê duyệt riêng. Xem [nguyên nhân lỗi retry và cách phòng ngừa](docs/workspace-conflict-retry.md).
+
 ## Sử dụng
 
 - **Đếm ngược:** nhập giờ/phút/giây, chọn một trong 10 mốc nhanh, đặt tên rồi bắt đầu. Số lớn là **giờ:phút**, giây hiển thị riêng bên phải. Có tạm dừng, tiếp tục, khởi động lại, kết thúc và toàn màn hình (hoặc giao diện tập trung thay thế nếu Fullscreen API không khả dụng).

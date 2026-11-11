@@ -36,10 +36,20 @@ Bốn nhóm kiểm tra: atomic install/data hashes/diagnostics/rerun, từ chố
 
 `scripts/local-auth-stack.mjs` nay dùng PostgREST 14.18 và tự áp dụng incremental + conflict protection trên database test cục bộ. Việc này bảo đảm integration tests đi qua cùng lớp transaction như production. Bản Postgres local vẫn là 15, chưa phải đúng PG17.11 của nguồn backup production; không khẳng định kết quả hiệu năng production từ local.
 
-Kết quả bản sửa: **4/4 nhóm SQL/API** trên 14.18 và **4/4** nhóm tương thích trên 16.5; **145/145 unit**, **29/29 integration** trên stack mặc định 14.18; build thành công. Integration bao gồm signup/login, hai thiết bị, CAS, offline/reconnect, dữ liệu cục bộ khi timeout, Task/Checklist/Calendar/Focus History và xóa Habit/Task lặp. Giao diện không thay đổi nên không chạy lại bộ e2e UI riêng. Chưa kiểm tra Safari thật hoặc áp dụng/đo kết quả của SQL mới trên project thật.
+Kết quả bản sửa ở commit `7a9dcf3`: **4/4 nhóm SQL/API** trên 14.18 và **4/4** nhóm tương thích trên 16.5; **145/145 unit**, **29/29 integration** trên stack mặc định 14.18; build thành công. Integration bao gồm signup/login, hai thiết bị, CAS, offline/reconnect, dữ liệu cục bộ khi timeout, Task/Checklist/Calendar/Focus History và xóa Habit/Task lặp. Giao diện không thay đổi nên không chạy lại bộ e2e UI riêng ở commit đó. Chưa kiểm tra Safari thật hoặc đo CPU project thật.
 
 Chỉ sau khi chủ dự án phê duyệt riêng installer này mới hướng dẫn áp dụng lên `lbd-focus-db`. Phê duyệt installer incremental hoặc restart trước đó không được hiểu thành phê duyệt bản sửa này.
 
 Sau khi cài: chạy diagnostics chỉ đọc, xem pool/API và CPU hiện tại, rồi mở một thiết bị trên Preview hiện tại để thử read/sync trước. Nếu app hiện xung đột dữ liệu, phải giữ bản cục bộ và xem/backup các thay đổi trước khi chọn bản máy chủ hoặc bản thiết bị. Sau đó mới kiểm tra cùng tài khoản trên iPhone và xóa Habit/Task lặp tạm. Không đánh dấu hoàn tất khi chưa có kết quả thực tế.
 
 Không restart lặp lại hoặc terminate PID cũ để thay cho sửa nguyên nhân. Không rollback về SQLSTATE `40001` vì sẽ khôi phục lỗi retry; file rollback incremental cũ sẽ từ chối body mới. Nếu cần hoàn nguyên phải review một phương án cụ thể và phê duyệt riêng, giữ dữ liệu tài khoản hiện tại, không tự restore dump.
+
+## Xác nhận và phòng ngừa — 11/11/2026
+
+Chủ dự án cung cấp thông báo installer hoàn tất và ảnh diagnostics đủ **5/5 true**, sau đó xác nhận bản mới nhất hoạt động bình thường. Đây là xác nhận từ người dùng; chưa có số đo CPU sau sửa, kết quả sync hai thiết bị hay xóa Habit/Task lặp thật để kết luận toàn bộ mục tiêu đã kiểm chứng.
+
+Workflow `V2 regression` bổ sung kiểm thử tự động cho nhánh V2: unit/build, SQL installer/rollback safety, incremental/no-retry regression trên đúng PostgREST 14.18, integration hai thiết bị và desktop/mobile UI. Không dùng credentials cloud, không sửa Database thật, không merge/deploy Production. Workflow chỉ báo trạng thái checks, chưa ràng buộc Vercel phải đợi checks trước khi tạo Preview.
+
+Quy trình đã được kiểm tra cục bộ: YAML và shell hợp lệ; khởi động/kiểm tra readiness backend localhost đạt; **145 unit**, **30 nhóm SQL/API**, **29 integration**, **120 UI** và **24 smoke test trên bản build** đạt; build/TypeScript đạt. Bộ UI đầy đủ chạy dev riêng vì có fixture import source Vite; smoke test core chạy trên `dist/` ở cổng riêng. Đây là kết quả local, chưa phải xác nhận lượt chạy GitHub-hosted runner.
+
+Giữ địa chỉ Preview hiện đang ổn định trên cả hai thiết bị. Trước mỗi cập nhật tiếp theo, chỉ chuyển sang bản mới khi checks đã xanh và đã kiểm tra sync; giữ/export bản cục bộ nếu đang pending. Thay đổi SQL phải tiếp tục được phê duyệt riêng. Khi Supabase đổi phiên bản PostgREST, cập nhật test stack và chạy lại regression trước khi sửa các RPC báo lỗi xung đột.

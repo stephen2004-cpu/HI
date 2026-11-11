@@ -1,6 +1,6 @@
 # Giảm tải ghi workspace và quy trình khôi phục dịch vụ
 
-**Cập nhật 10/11/2026:** đã tái hiện vòng lặp retry SQLSTATE `40001` trên PostgREST 14.18. Bản incremental dưới đây giảm ghi thừa nhưng chưa sửa nguyên nhân đó. Xem [bản sửa conflict retry](workspace-conflict-retry.md) cùng installer riêng, đang chờ phê duyệt cho Database thật.
+**Cập nhật 11/11/2026:** đã tái hiện và chuẩn bị bản sửa vòng lặp retry SQLSTATE `40001` trên PostgREST 14.18. Chủ dự án đã chạy installer conflict protection, cung cấp diagnostics 5/5 true và báo app hoạt động bình thường trở lại. Xem [bản sửa conflict retry](workspace-conflict-retry.md). Chưa có số đo CPU mới hoặc kết quả kiểm thử xóa trên hai thiết bị thật.
 
 ## Bằng chứng và giới hạn
 

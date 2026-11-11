@@ -1,0 +1,111 @@
+name: V2 regression
+
+on:
+  push:
+    branches: [feature/lbd-focus-v2]
+  pull_request:
+    branches: [feature/lbd-focus-v2]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Unit, UI and sync (PostgREST 14.18)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Unit tests and build
+        run: |
+          npm test
+          npm run build
+      - name: Install Chromium
+        run: |
+          npx playwright install --with-deps chromium
+          node <<'JS'
+          const fs = require('node:fs');
+          const { chromium } = require('@playwright/test');
+          fs.appendFileSync(process.env.GITHUB_ENV,
+            'PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=' + chromium.executablePath() + '\n');
+          JS
+      - name: Prepare local database images
+        run: |
+          docker pull postgres:15-alpine
+          docker pull supabase/gotrue:v2.197.0
+          docker pull postgrest/postgrest:v14.18
+      - name: Start isolated local test backend
+        shell: bash
+        run: |
+          node scripts/local-auth-stack.mjs > /tmp/lbd-v2-stack.log 2>&1 &
+          lbd_stack_pid=$!
+          echo "$lbd_stack_pid" > /tmp/lbd-v2-stack.pid
+          for lbd_attempt in $(seq 1 60); do
+            if node <<'JS'
+          const fs = require('node:fs');
+          (async () => {
+            const cfg = JSON.parse(fs.readFileSync('/tmp/lbd-auth-stack/public.json', 'utf8'));
+            if (!['127.0.0.1', 'localhost'].includes(new URL(cfg.url).hostname)) process.exit(1);
+            const responses = await Promise.all(['/auth/v1/health', '/rest/v1/'].map(path =>
+              fetch(cfg.url + path, {
+                headers: { apikey: cfg.key, Authorization: 'Bearer ' + cfg.key },
+                signal: AbortSignal.timeout(1000),
+              })));
+            process.exit(responses.every(response => response.ok) ? 0 : 1);
+          })().catch(() => process.exit(1));
+          JS
+            then
+              exit 0
+            fi
+            if ! kill -0 "$lbd_stack_pid" 2>/dev/null; then
+              cat /tmp/lbd-v2-stack.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/lbd-v2-stack.log
+          exit 1
+      - name: Database safety and retry regressions
+        run: |
+          python3 scripts/test-habit-installer.py
+          python3 scripts/test-task-repeat-db.py
+          python3 scripts/test-deletion-installers.py
+          python3 scripts/test-incremental-sync.py
+          python3 scripts/test-conflict-retry.py
+      - name: Two-device sync integration
+        run: npx playwright test --config=playwright.auth.config.ts
+      - name: Desktop and mobile UI
+        run: npx playwright test --workers=2
+      - name: Built Preview smoke tests
+        run: npx playwright test --config=playwright.preview.config.ts --workers=2
+      - name: Preserve failure context
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v2-test-failure
+          path: |
+            test-results-auth/
+            test-results/
+            test-results-preview/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop the disposable test backend
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/lbd-v2-stack.pid ]; then
+            kill -TERM "$(cat /tmp/lbd-v2-stack.pid)" 2>/dev/null || true
+          fi
+          docker rm -f lbd-auth-rest lbd-auth-gotrue lbd-auth-pg 2>/dev/null || true

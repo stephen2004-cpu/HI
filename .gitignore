@@ -11,3 +11,4 @@ supabase/.temp/
 supabase/.branches/
 
 test-results-auth/
+test-results-preview/
