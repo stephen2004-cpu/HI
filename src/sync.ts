@@ -127,10 +127,11 @@ export class WorkspaceSync {
   private editing() {
     return (
       typeof document !== 'undefined' &&
-      document.activeElement?.matches(
-        'input,textarea,select,[contenteditable=true]',
-      ) &&
-      document.activeElement.closest('main')
+      (document.querySelector?.('[data-workspace-editing="true"]') ||
+        (document.activeElement?.matches(
+          'input,textarea,select,[contenteditable=true]',
+        ) &&
+          document.activeElement.closest('main')))
     );
   }
   private async remote() {

@@ -705,3 +705,41 @@ it('backs off automatic retries after server errors while allowing one explicit 
   expect(rpc).toHaveBeenCalledTimes(4);
   e.stop();
 });
+
+it('holds incoming data while a Task scope choice is open even after input loses focus, then applies it only on explicit server choice', async () => {
+  const local = emptyWorkspace();
+  storeWorkspace('a', local);
+  writeMeta('a', { revision: 1, dirty: false });
+  let choiceOpen = true;
+  vi.stubGlobal(
+    'document',
+    Object.assign(new EventTarget(), {
+      activeElement: { matches: () => false },
+      querySelector: (selector: string) =>
+        selector === '[data-workspace-editing="true"]' && choiceOpen
+          ? {}
+          : null,
+    }),
+  );
+  const remote = structuredClone(local);
+  remote.timer.settings.name = 'Incoming server settings';
+  const e = new WorkspaceSync(
+    {
+      rpc: async () => ({
+        data: { revision: 2, payload: remote },
+        error: null,
+      }),
+    } as unknown as SupabaseClient,
+    'a',
+    vi.fn(),
+  );
+  await e.start();
+  expect(e.status).toBe('remote-waiting');
+  expect(readWorkspace('a')).toEqual(local);
+  expect(readMeta('a')).toEqual({ revision: 1, dirty: false });
+  choiceOpen = false;
+  await e.useServer();
+  expect(readWorkspace('a')).toEqual(remote);
+  expect(e.status).toBe('synced');
+  e.stop();
+});

@@ -14,6 +14,30 @@
   --radius: 20px;
   color-scheme: dark;
 }
+.task-scope-choice {
+  width: 100%;
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--gold);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.task-scope-choice p {
+  margin: 0 0 12px;
+}
+.task-scope-choice small {
+  display: block;
+  margin-top: 12px;
+  color: var(--muted);
+}
+.scope-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.scope-actions .button {
+  flex: 1 1 155px;
+}
 * {
   box-sizing: border-box;
 }

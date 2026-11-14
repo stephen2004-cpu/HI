@@ -115,6 +115,10 @@ test('timed Task repeats create and synchronize four blocks on desktop/mobile, p
     .fill('2026-11-06T15:00');
   await p.getByLabel('Giờ kết thúc Task lặp', { exact: true }).fill('16:00');
   await p.getByRole('button', { name: 'Lưu Task', exact: true }).click();
+  await p
+    .getByRole('group', { name: 'Phạm vi lưu Task lặp' })
+    .getByRole('button', { name: 'Chỉ lần này', exact: true })
+    .click();
   await expect
     .poll(
       async () => {
@@ -131,7 +135,7 @@ test('timed Task repeats create and synchronize four blocks on desktop/mobile, p
   await row.getByRole('button', { name: 'Xóa', exact: true }).click();
   await p
     .getByRole('group', { name: 'Xác nhận xóa Task' })
-    .getByRole('button', { name: 'Xác nhận xóa', exact: true })
+    .getByRole('button', { name: 'Chỉ lần này', exact: true })
     .click();
   await expect
     .poll(

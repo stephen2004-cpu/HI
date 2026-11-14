@@ -15,6 +15,7 @@ const sections = [
     steps: [
       'Mở Task, nhấn Tạo Task, nhập nội dung và lưu. Bạn có thể sửa, xóa hoặc tích hoàn thành trên thẻ Task.',
       'Chọn nhóm: Làm ngay (xanh lá), Lên lịch (vàng), Ủy quyền (xanh dương), Loại bỏ (hồng). Kéo thẻ giữa các nhóm hoặc dùng mục Chuyển nhóm. Màu tùy chỉnh không đổi nhóm ưu tiên.',
+      'Với Task lặp, khi lưu thay đổi màu hoặc nội dung, chọn Chỉ lần này hoặc Toàn bộ chuỗi lặp. Khi xóa cũng chọn một lần hay cả chuỗi. Tiến độ mỗi ngày và lịch sử Focus được giữ riêng.',
       'Chọn Ngày, Tuần hoặc Tháng và bộ lọc trạng thái để tìm việc. Task chưa có lịch nằm ở phần Task chưa lên lịch; kiểm tra thêm phần quá hạn để tránh bỏ sót.',
       'Dùng thao tác lên lịch trên thẻ hoặc mở Lịch để sắp xếp thời gian. Một Task có thể có nhiều Time Block.',
     ],

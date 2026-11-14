@@ -76,6 +76,10 @@ test('saves all four timed repeats immediately, renders Calendar without +, relo
     .fill('2026-11-06T15:00');
   await page.getByLabel('Giờ kết thúc Task lặp', { exact: true }).fill('16:00');
   await page.getByRole('button', { name: 'Lưu Task', exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Phạm vi lưu Task lặp' })
+    .getByRole('button', { name: 'Chỉ lần này', exact: true })
+    .click();
   b = await blocks(page);
   expect(new Date(b[1].start).getHours()).toBe(15);
   expect((b[1].end - b[1].start) / 60000).toBe(60);

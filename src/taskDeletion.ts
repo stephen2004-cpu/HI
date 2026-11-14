@@ -36,3 +36,15 @@ export function taskDeletionIssue(result: {
     unchanged
   );
 }
+
+export function taskSeriesDeletionIssue(
+  result: Parameters<typeof taskDeletionIssue>[0],
+): string | null {
+  if (!result.error && result.data === 1) return null;
+  if (
+    ['PGRST202', '42883'].includes(result.error?.code ?? '') ||
+    result.status === 404
+  )
+    return 'Xóa toàn bộ chuỗi chưa được bật cho tài khoản này. Chưa xóa Task; dữ liệu, Checklist và lịch sử vẫn được giữ.';
+  return taskDeletionIssue(result);
+}

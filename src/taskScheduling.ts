@@ -79,10 +79,18 @@ export function visibleTaskBlocks(
   const visible = new Set(
     visibleTaskInstances(tasks, now, protectedIds).map((t) => t.id),
   );
+  const deletedSeries = new Set(
+    tasks.filter((t) => t.repeat && t.deletedAt !== undefined).map((t) => t.id),
+  );
   return blocks.filter((b) => {
     if (b.cancelled) return false;
     const task = tasks.find((t) => t.id === b.taskId);
-    if (task?.deletedAt !== undefined || (b.automaticTaskId && !task))
+    if (
+      task?.deletedAt !== undefined ||
+      (task?.repeatSeriesId && deletedSeries.has(task.repeatSeriesId)) ||
+      (b.recurringTaskId && deletedSeries.has(b.recurringTaskId)) ||
+      (b.automaticTaskId && !task)
+    )
       return false;
     return !b.recurringTaskId || !task || visible.has(task.id);
   });
@@ -170,10 +178,22 @@ export function scheduleTaskRepeats(
   let added = 0,
     updated = 0,
     cancelled = 0;
+  const deletedSeries = new Set(
+    next.filter((t) => t.repeat && t.deletedAt !== undefined).map((t) => t.id),
+  );
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i],
       task = next.find((t) => t.id === b.taskId);
-    if (!b.recurringTaskId || b.cancelled || !task) continue;
+    if (b.cancelled) continue;
+    if (
+      task?.deletedAt !== undefined ||
+      (b.recurringTaskId && deletedSeries.has(b.recurringTaskId))
+    ) {
+      blocks[i] = { ...b, cancelled: true };
+      cancelled++;
+      continue;
+    }
+    if (!b.recurringTaskId || !task) continue;
     if (
       task.deletedAt !== undefined ||
       (!live.has(task.id) &&

@@ -1,4 +1,5 @@
-import { taskDeletionIssue } from '../taskDeletion';
+import { taskDeletionIssue, taskSeriesDeletionIssue } from '../taskDeletion';
+import TaskScopeChoice from './TaskScopeChoice';
 import {
   scheduleOf,
   hasTaskStart,
@@ -16,8 +17,11 @@ import {
   futureTaskEffectiveDate,
   createTaskRepeat,
   editFutureTaskRepeat,
+  editAllTaskRepeat,
+  deleteTaskRepeat,
   repeatSettings,
   type TaskRepeatSettings,
+  type TaskEditScope,
 } from '../taskRecurrence';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Planner, TimeBlock } from '../planner';
@@ -91,7 +95,12 @@ export default function TaskBoard({
       ? { startDate: initialDraft.plannedStart.slice(0, 10) }
       : {}),
   }));
-  const [editScope, setEditScope] = useState<'single' | 'future'>('single');
+  const [editScope, setEditScope] = useState<TaskEditScope>('single');
+  const [saveChoice, setSaveChoice] = useState(false);
+  const [groupChoice, setGroupChoice] = useState<{
+    id: string;
+    group: Group;
+  } | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -103,6 +112,7 @@ export default function TaskBoard({
     {},
   );
   const form = useRef<HTMLFormElement>(null);
+  const editBaseline = useRef<Task | null>(null);
   const mounted = useRef(true),
     deleteRequest = useRef(0);
   useEffect(() => {
@@ -183,8 +193,11 @@ export default function TaskBoard({
     setTasks(next);
     setError('');
   };
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    setSaveChoice(false);
+    setGroupChoice(null);
+  }, [editing]);
+  const saveTask = (selectedScope: TaskEditScope) => {
     if (!draft.title.trim()) return;
     const stored = readTaskStore();
     if (stored.error) {
@@ -208,7 +221,26 @@ export default function TaskBoard({
       let next: Task[];
       let createdDate: string | undefined;
       if (original?.repeatSeriesId) {
-        if (editScope === 'future')
+        if (
+          stored.tasks.find((t) => t.id === original.repeatSeriesId)
+            ?.deletedAt !== undefined
+        )
+          throw Error('Chuỗi Task đã xóa trên thiết bị khác. Chưa lưu.');
+        if (selectedScope === 'all') {
+          const before = editBaseline.current ?? {
+            ...repeatDraft(original),
+            timing: original.timing ?? timingOf(),
+            repeatSchedule: scheduleOf(original),
+          };
+          next = editAllTaskRepeat(
+            stored.tasks,
+            original,
+            task,
+            repeat,
+            taskProtectedIds(),
+            before,
+          );
+        } else if (selectedScope === 'future')
           next = editFutureTaskRepeat(
             stored.tasks,
             original,
@@ -257,6 +289,7 @@ export default function TaskBoard({
       setDraft(empty);
       setRepeat(defaultTaskRepeat());
       setEditScope('single');
+      setSaveChoice(false);
       if (createdDate) setDate(createdDate);
       else if (!editing && hasTaskStart(task))
         setDate(task.plannedStart!.slice(0, 10));
@@ -270,8 +303,64 @@ export default function TaskBoard({
       setError(e instanceof Error ? e.message : 'Không lưu được Task.');
     }
   };
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (editingTask?.repeatSeriesId && editScope !== 'future')
+      setSaveChoice(true);
+    else saveTask(editScope);
+  };
+  const applyGroup = (selectedScope: 'single' | 'all') => {
+    if (!groupChoice) return;
+    try {
+      const stored = readTaskStore(),
+        currentPlanner = loadPlanner();
+      const current = stored.tasks.find((t) => t.id === groupChoice.id);
+      if (
+        stored.error ||
+        currentPlanner.error ||
+        !current ||
+        current.deletedAt !== undefined
+      )
+        throw Error('Không đọc được dữ liệu mới nhất. Chưa thay đổi Task.');
+      let next: Task[];
+      if (selectedScope === 'all') {
+        const root = stored.tasks.find((t) => t.id === current.repeatSeriesId);
+        next = editAllTaskRepeat(
+          stored.tasks,
+          current,
+          { ...current, group: groupChoice.group },
+          repeatSettings(root, current.repeatDate),
+          taskProtectedIds(),
+        );
+      } else
+        next = stored.tasks.map((t) =>
+          t.id === current.id
+            ? { ...t, group: groupChoice.group, repeatOverride: true }
+            : t,
+        );
+      const scheduled = scheduleTaskRepeats(
+        next,
+        currentPlanner.data,
+        range.from,
+        range.to,
+        taskProtectedIds(),
+      );
+      if (!persistTaskCalendar(scheduled.tasks, scheduled.planner))
+        throw Error('Không lưu được thay đổi. Dữ liệu cũ được giữ.');
+      setTasks(readTasks().tasks);
+      setGroupChoice(null);
+      if (editing === current.id)
+        setDraft((previous) => ({ ...previous, group: groupChoice.group }));
+      setError('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Không lưu được Task.');
+    }
+  };
   const deleteRunning = useRef(false);
-  const removeTask = async (t: Task) => {
+  const removeTask = async (
+    t: Task,
+    selectedScope: 'single' | 'all' = 'single',
+  ) => {
     if (deleteRunning.current) return;
     deleteRunning.current = true;
     setDeleteError('');
@@ -283,7 +372,11 @@ export default function TaskBoard({
     try {
       if (t.repeatSeriesId && scope) {
         const result = await supabase
-          ?.rpc('lbd_task_repeat_capabilities')
+          ?.rpc(
+            selectedScope === 'all'
+              ? 'lbd_task_series_deletion_capabilities'
+              : 'lbd_task_repeat_capabilities',
+          )
           .abortSignal(controller.signal);
         if (
           !mounted.current ||
@@ -295,7 +388,9 @@ export default function TaskBoard({
           ? 'Máy chủ phản hồi quá lâu. Chưa xóa Task; dữ liệu vẫn được giữ. Hãy thử lại.'
           : !result
             ? 'Chưa cấu hình kết nối Supabase. Chưa xóa Task; dữ liệu vẫn được giữ.'
-            : taskDeletionIssue(result);
+            : selectedScope === 'all'
+              ? taskSeriesDeletionIssue(result)
+              : taskDeletionIssue(result);
         if (issue) {
           setDeleteError(issue);
           return;
@@ -310,9 +405,7 @@ export default function TaskBoard({
       const latest = readTaskStore();
       if (latest.error) throw Error('Không đọc được Task mới nhất. Chưa xóa.');
       const next = t.repeatSeriesId
-        ? latest.tasks.map((x) =>
-            x.id === t.id ? { ...x, deletedAt: Date.now() } : x,
-          )
+        ? deleteTaskRepeat(latest.tasks, t, selectedScope)
         : latest.tasks.filter((x) => x.id !== t.id);
       const currentPlanner = loadPlanner();
       if (currentPlanner.error) throw Error('Không đọc được lịch. Chưa xóa.');
@@ -330,11 +423,14 @@ export default function TaskBoard({
       setNotice(
         t.repeatSeriesId
           ? scope
-            ? 'Đã ghi dấu xóa Task trên thiết bị; chờ đồng bộ máy chủ.'
-            : 'Đã xóa lần Task trên thiết bị và giữ dấu xóa chống tạo lại.'
+            ? `Đã ghi dấu xóa ${selectedScope === 'all' ? 'toàn bộ chuỗi' : 'lần'} Task; chờ đồng bộ máy chủ.`
+            : `Đã xóa ${selectedScope === 'all' ? 'toàn bộ chuỗi' : 'lần'} Task trên thiết bị và giữ dấu xóa chống tạo lại.`
           : 'Đã xóa Task.',
       );
-      if (editing === t.id) {
+      if (
+        editing === t.id ||
+        (selectedScope === 'all' && editingSeries?.id === t.repeatSeriesId)
+      ) {
         setEditing(null);
         setDraft(empty);
         setRepeat(defaultTaskRepeat());
@@ -348,6 +444,22 @@ export default function TaskBoard({
         setDeleteBusy(false);
     }
   };
+  const deletionChoice = (t: Task) =>
+    t.repeatSeriesId ? (
+      <TaskScopeChoice
+        name="Xác nhận xóa Task"
+        description={`Bạn muốn xóa lần ngày ${t.repeatDate} hay toàn bộ chuỗi “${t.title}”? Các Time Block liên quan sẽ được gỡ khỏi lịch.`}
+        busy={deleteBusy}
+        error={deleteError}
+        onSingle={() => void removeTask(t, 'single')}
+        onAll={() => void removeTask(t, 'all')}
+        onCancel={() => {
+          deleteRequest.current++;
+          setDeleting(null);
+          setDeleteError('');
+        }}
+      />
+    ) : null;
   const taskCard = (row: TaskRow) => {
     const t = row.task;
     return (
@@ -457,7 +569,9 @@ export default function TaskBoard({
             value={t.group}
             disabled={loaded.error || deleteBusy}
             onChange={(e) =>
-              commit(moveTask(tasks, t.id, e.target.value as Group))
+              t.repeatSeriesId
+                ? setGroupChoice({ id: t.id, group: e.target.value as Group })
+                : commit(moveTask(tasks, t.id, e.target.value as Group))
             }
           >
             {groups.map((q) => (
@@ -474,8 +588,15 @@ export default function TaskBoard({
             onClick={() => {
               setDeleteError('');
               setDeleting(null);
+              setSaveChoice(false);
+              setGroupChoice(null);
               setEditing(t.id);
               setDraft(repeatDraft(t));
+              editBaseline.current = {
+                ...repeatDraft(t),
+                timing: t.timing ?? timingOf(),
+                repeatSchedule: scheduleOf(t),
+              };
               const root = readTaskStore().tasks.find(
                 (x) => x.id === t.repeatSeriesId,
               );
@@ -493,6 +614,7 @@ export default function TaskBoard({
               deleteRequest.current++;
               setDeleting(t.id);
               setDeleteError('');
+              if (editing === t.id) showForm();
             }}
           >
             Xóa
@@ -512,35 +634,48 @@ export default function TaskBoard({
             {row.overdue ? 'Lên lịch lại' : 'Mở Calendar'}
           </button>
         </div>
-        {deleting === t.id && (
-          <div role="group" aria-label="Xác nhận xóa Task">
-            <p>
-              {t.repeatSeriesId
-                ? 'Xóa riêng lần Task này? Dấu xóa được giữ để không tạo lại ngày này; các lần khác vẫn tiếp tục.'
-                : 'Xóa công việc này?'}
-            </p>
-            {deleteError && <p role="alert">{deleteError}</p>}
-            <button
-              className="button"
-              disabled={deleteBusy}
-              onClick={async () => {
-                await removeTask(t);
-              }}
-            >
-              Xác nhận xóa
-            </button>
-            <button
-              className="button"
-              disabled={deleteBusy}
-              onClick={() => {
-                deleteRequest.current++;
-                setDeleting(null);
-              }}
-            >
-              Hủy xóa
-            </button>
-          </div>
+        {groupChoice?.id === t.id && (
+          <TaskScopeChoice
+            name="Phạm vi chuyển nhóm Task lặp"
+            description="Chuyển nhóm cho riêng lần này hay toàn bộ chuỗi lặp?"
+            onSingle={() => applyGroup('single')}
+            onAll={() => applyGroup('all')}
+            onCancel={() => setGroupChoice(null)}
+          />
         )}
+        {deleting === t.id &&
+          (editing !== t.id || !t.repeatSeriesId) &&
+          (t.repeatSeriesId ? (
+            deletionChoice(t)
+          ) : (
+            <div role="group" aria-label="Xác nhận xóa Task">
+              <p>
+                {t.repeatSeriesId
+                  ? 'Xóa riêng lần Task này? Dấu xóa được giữ để không tạo lại ngày này; các lần khác vẫn tiếp tục.'
+                  : 'Xóa công việc này?'}
+              </p>
+              {deleteError && <p role="alert">{deleteError}</p>}
+              <button
+                className="button"
+                disabled={deleteBusy}
+                onClick={async () => {
+                  await removeTask(t);
+                }}
+              >
+                Xác nhận xóa
+              </button>
+              <button
+                className="button"
+                disabled={deleteBusy}
+                onClick={() => {
+                  deleteRequest.current++;
+                  setDeleting(null);
+                }}
+              >
+                Hủy xóa
+              </button>
+            </div>
+          ))}
       </article>
     );
   };
@@ -641,6 +776,8 @@ export default function TaskBoard({
                 setDraft(empty);
                 setRepeat(defaultTaskRepeat());
                 setEditScope('single');
+                setSaveChoice(false);
+                setGroupChoice(null);
                 showForm();
               }}
             >
@@ -679,7 +816,12 @@ export default function TaskBoard({
                   onDrop={(e) => {
                     e.preventDefault();
                     const id = e.dataTransfer.getData('text/plain') || dragging;
-                    if (id) commit(moveTask(tasks, id, g.id));
+                    if (id) {
+                      const moving = tasks.find((t) => t.id === id);
+                      if (moving?.repeatSeriesId)
+                        setGroupChoice({ id, group: g.id });
+                      else commit(moveTask(tasks, id, g.id));
+                    }
                     setDragging(null);
                   }}
                 >
@@ -847,11 +989,9 @@ export default function TaskBoard({
           change={(patch) =>
             setDraft((previous) => ({ ...previous, ...patch }))
           }
-          draftChecklist={
-            !!editingTask?.repeatSeriesId && editScope === 'future'
-          }
+          draftChecklist={!!editingTask?.repeatSeriesId}
           changeChecklist={
-            editing && !(editingTask?.repeatSeriesId && editScope === 'future')
+            editing && !editingTask?.repeatSeriesId
               ? (checklist: ChecklistStep[]) => {
                   const latest = readTasks();
                   if (
@@ -877,6 +1017,21 @@ export default function TaskBoard({
               : undefined
           }
         />
+        {saveChoice && editingTask?.repeatSeriesId && (
+          <TaskScopeChoice
+            name="Phạm vi lưu Task lặp"
+            description={`Áp dụng những thay đổi này cho lần ngày ${editingTask.repeatDate} hay toàn bộ chuỗi lặp? Lịch đã chỉnh tay và thời gian của các phiên đã làm được giữ nguyên.`}
+            onSingle={() => {
+              setSaveChoice(false);
+              saveTask('single');
+            }}
+            onAll={() => {
+              setSaveChoice(false);
+              saveTask('all');
+            }}
+            onCancel={() => setSaveChoice(false)}
+          />
+        )}
         <button
           className="button primary"
           disabled={loaded.error || deleteBusy || (editorOnly && plannerError)}
@@ -894,14 +1049,25 @@ export default function TaskBoard({
             className="button danger"
             disabled={loaded.error || deleteBusy}
             onClick={() => {
-              setDeleting(null);
-              void removeTask(editingTask);
+              setSaveChoice(false);
+              if (editingTask.repeatSeriesId) {
+                setDeleting(editingTask.id);
+                setDeleteError('');
+              } else {
+                setDeleting(null);
+                void removeTask(editingTask);
+              }
             }}
           >
             {deleteBusy ? 'Đang xóa…' : 'Xóa vĩnh viễn'}
           </button>
         )}
-        {editing && deleteError && <p role="alert">{deleteError}</p>}
+        {editingTask &&
+          deleting === editingTask.id &&
+          deletionChoice(editingTask)}
+        {editing && deleteError && !deleting && (
+          <p role="alert">{deleteError}</p>
+        )}
         {editing && (
           <button
             type="button"

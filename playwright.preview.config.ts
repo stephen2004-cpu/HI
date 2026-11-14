@@ -5,7 +5,12 @@ import base from './playwright.config';
 // suite also has a source-module fixture for simulating an incoming tombstone.
 export default defineConfig({
   ...base,
-  testMatch: ['**/app.spec.ts', '**/interface.spec.ts', '**/tasks.spec.ts'],
+  testMatch: [
+    '**/app.spec.ts',
+    '**/interface.spec.ts',
+    '**/tasks.spec.ts',
+    '**/task-series.spec.ts',
+  ],
   outputDir: './test-results-preview',
   use: { ...base.use, baseURL: 'http://127.0.0.1:5175' },
   webServer: {

@@ -50,6 +50,10 @@ test('Task repeat generates independent dated work, supports single/future edits
   );
   await page.getByLabel('Tên công việc', { exact: true }).fill('Lần sửa riêng');
   await page.getByRole('button', { name: 'Lưu Task', exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Phạm vi lưu Task lặp' })
+    .getByRole('button', { name: 'Chỉ lần này', exact: true })
+    .click();
   await expect(card(page, '2026-10-28')).toContainText('Lần sửa riêng');
   await expect(card(page, '2026-10-30')).toContainText('Task lặp');
   await card(page, '2026-10-26')
@@ -121,6 +125,10 @@ test('deleted occurrences never regenerate and a nonmatching start respects an i
     .click();
   await page
     .getByRole('button', { name: 'Xóa vĩnh viễn', exact: true })
+    .click();
+  await page
+    .getByRole('group', { name: 'Xác nhận xóa Task' })
+    .getByRole('button', { name: 'Chỉ lần này', exact: true })
     .click();
   await expect(
     page.getByRole('group', { name: 'Xác nhận xóa Task' }),

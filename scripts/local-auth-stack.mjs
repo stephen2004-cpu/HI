@@ -254,6 +254,7 @@ docker(
 for (const file of [
   '../supabase/manual/install_workspace_incremental_sync_safe.sql',
   '../supabase/manual/fix_workspace_conflict_retry_safe.sql',
+  '../supabase/manual/install_task_series_deletions_safe.sql',
 ]) {
   docker(
     [

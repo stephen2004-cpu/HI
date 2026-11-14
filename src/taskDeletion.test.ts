@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { taskDeletionIssue } from './taskDeletion';
+import { taskDeletionIssue, taskSeriesDeletionIssue } from './taskDeletion';
 it('only capability version 1 without an error authorizes deletion', () => {
   expect(taskDeletionIssue({ data: 1, error: null })).toBeNull();
   for (const data of [null, 0, 2, '1', {}, true])
@@ -27,3 +27,17 @@ it.each([
     expect(issue).not.toMatch(/secret|token|password/);
   },
 );
+it('requires the separate series capability and preserves existing single-occurrence authorization', () => {
+  expect(taskSeriesDeletionIssue({ data: 1, error: null })).toBeNull();
+  expect(
+    taskSeriesDeletionIssue({
+      data: null,
+      error: { code: 'PGRST202' },
+      status: 404,
+    }),
+  ).toContain('Xóa toàn bộ chuỗi chưa được bật');
+  expect(taskSeriesDeletionIssue({ data: 2, error: null })).toContain(
+    'Chưa xóa Task',
+  );
+  expect(taskDeletionIssue({ data: 1, error: null })).toBeNull();
+});

@@ -1,6 +1,10 @@
 import type { Task } from '../tasks';
 import { localDate } from '../habits';
-import { previewTaskRepeat, type TaskRepeatSettings } from '../taskRecurrence';
+import {
+  previewTaskRepeat,
+  type TaskRepeatSettings,
+  type TaskEditScope,
+} from '../taskRecurrence';
 const weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 export default function TaskRepeatEditor({
   settings,
@@ -15,8 +19,8 @@ export default function TaskRepeatEditor({
   settings: TaskRepeatSettings;
   change: (s: TaskRepeatSettings) => void;
   series?: Task;
-  scope: 'single' | 'future';
-  setScope: (s: 'single' | 'future') => void;
+  scope: TaskEditScope;
+  setScope: (s: TaskEditScope) => void;
   instanceDate?: string;
   locked?: boolean;
   effectiveDate?: string;
@@ -39,10 +43,11 @@ export default function TaskRepeatEditor({
           <select
             aria-label="Phạm vi chỉnh sửa Task lặp"
             value={scope}
-            onChange={(e) => setScope(e.target.value as 'single' | 'future')}
+            onChange={(e) => setScope(e.target.value as TaskEditScope)}
           >
             <option value="single">Chỉ lần này</option>
             <option value="future">Các lần tương lai</option>
+            <option value="all">Toàn bộ chuỗi lặp</option>
           </select>
         </label>
       )}
@@ -203,6 +208,13 @@ export default function TaskRepeatEditor({
           Task.
         </p>
       )}
+      {series && scope === 'all' && (
+        <p className="task-repeat-preview">
+          Chỉ các nội dung vừa sửa được áp dụng chung; giữ ghi chú riêng không
+          sửa, tiến độ từng ngày và lịch sử Focus. Bạn chọn phạm vi khi Lưu
+          Task.
+        </p>
+      )}
       <small>
         Có giờ dự kiến: tự tạo Time Block cho các lần hợp lệ. Chưa có giờ: chọn
         giờ trong phần bên dưới. Ngày bỏ lỡ vẫn tính một lần. Mỗi lần có trạng
@@ -211,7 +223,9 @@ export default function TaskRepeatEditor({
         không bị viết lại.
       </small>
       {series && scope === 'single' && (
-        <small>Để đổi quy tắc lặp, chọn phạm vi “Các lần tương lai”.</small>
+        <small>
+          Để đổi quy tắc lặp, chọn “Các lần tương lai” hoặc “Toàn bộ chuỗi lặp”.
+        </small>
       )}
     </fieldset>
   );

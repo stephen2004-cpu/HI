@@ -24,6 +24,7 @@ export type TaskRepeatRule = {
   template: TaskTemplate;
 };
 export type TaskRepeat = { rules: TaskRepeatRule[] };
+export type TaskEditScope = 'single' | 'future' | 'all';
 export type TaskRepeatSettings = {
   mode: 'none' | 'weekly';
   startDate: string;
@@ -209,10 +210,22 @@ export function mergeTaskTombstones(local: Task[], remote: Task[]) {
       .filter((t) => t.deletedAt !== undefined)
       .map((t) => [t.id, t]),
   );
-  return [
+  const merged = [
     ...local.map((t) => dead.get(t.id) ?? t),
     ...[...dead.values()].filter((t) => !local.some((x) => x.id === t.id)),
   ];
+  const deletedSeries = new Map(
+    merged
+      .filter((t) => t.repeat && t.deletedAt !== undefined)
+      .map((t) => [t.id, t.deletedAt!]),
+  );
+  return merged.map((t) =>
+    t.repeatSeriesId &&
+    t.deletedAt === undefined &&
+    deletedSeries.has(t.repeatSeriesId)
+      ? { ...t, deletedAt: deletedSeries.get(t.repeatSeriesId)! }
+      : t,
+  );
 }
 export function visibleTaskInstances(
   tasks: Task[],
@@ -225,6 +238,8 @@ export function visibleTaskInstances(
     (t) =>
       !t.repeat &&
       t.deletedAt === undefined &&
+      (!t.repeatSeriesId ||
+        roots.get(t.repeatSeriesId)?.deletedAt === undefined) &&
       (!t.repeatSeriesId ||
         !t.repeatDate ||
         !roots.get(t.repeatSeriesId)?.repeat ||
@@ -255,8 +270,8 @@ export function generateTaskRange(
     +to - +from > 62 * 86400000
   )
     return tasks;
-  const next = [...tasks];
-  let changed = false;
+  const next = mergeTaskTombstones(tasks, []);
+  let changed = next.some((t, i) => t !== tasks[i]);
   const today = localDate(now);
   for (const root of tasks.filter(
     (t) =>
@@ -329,7 +344,7 @@ export function editFutureTaskRepeat(
   now = new Date(),
 ) {
   const root = tasks.find((t) => t.id === instance.repeatSeriesId && t.repeat);
-  if (!root?.repeat)
+  if (!root?.repeat || root.deletedAt !== undefined)
     throw Error('Không đọc được chuỗi Task. Chưa lưu thay đổi.');
   if (!repeatSettingsValid(settings))
     throw Error('Chọn ngày lặp và giới hạn hợp lệ.');
@@ -380,4 +395,192 @@ export function editFutureTaskRepeat(
     next = generateTaskRange(next, from, addDays(from, 1), protectedIds, now);
   }
   return next;
+}
+
+/** Delete intent is durable for the root and every known occurrence, never Timer history. */
+export function deleteTaskRepeat(
+  tasks: Task[],
+  instance: Task,
+  scope: 'single' | 'all',
+  deletedAt = Date.now(),
+) {
+  if (!Number.isSafeInteger(deletedAt) || deletedAt <= 0)
+    throw Error('Thời điểm xóa không hợp lệ.');
+  const current = tasks.find((t) => t.id === instance.id);
+  if (
+    !current?.repeatSeriesId ||
+    current.repeatSeriesId !== instance.repeatSeriesId
+  )
+    throw Error('Không đọc được lần Task mới nhất. Chưa xóa.');
+  if (
+    scope === 'all' &&
+    !tasks.some((t) => t.id === current.repeatSeriesId && t.repeat)
+  )
+    throw Error('Không đọc được chuỗi Task. Chưa xóa.');
+  const marked = mergeTaskTombstones(
+    tasks.map((t) =>
+      (t.id === current.id ||
+        (scope === 'all' &&
+          (t.id === current.repeatSeriesId ||
+            t.repeatSeriesId === current.repeatSeriesId))) &&
+      t.deletedAt === undefined
+        ? { ...t, deletedAt }
+        : t,
+    ),
+    [],
+  );
+  // The root is sent first so the server can protect/cancel the whole series in
+  // one pass instead of reconciling Calendar once per child on the first delete.
+  return scope === 'all'
+    ? [
+        ...marked.filter((t) => t.id === current.repeatSeriesId),
+        ...marked.filter((t) => t.id !== current.repeatSeriesId),
+      ]
+    : marked;
+}
+
+function editSharedChecklist(
+  existing: Task['checklist'],
+  before: Task['checklist'],
+  after: Task['checklist'],
+) {
+  const prior = new Map((before ?? []).map((s) => [s.id, s]));
+  const current = new Map((existing ?? []).map((s) => [s.id, s]));
+  const edited = (after ?? []).map((step) => {
+    const old = prior.get(step.id),
+      live = current.get(step.id);
+    const result = { ...structuredClone(step), done: live?.done ?? false };
+    if (old && live) {
+      if (old.text === step.text) result.text = live.text;
+      const previousDocs = new Map((old.documents ?? []).map((d) => [d.id, d]));
+      const nextDocs = new Map((step.documents ?? []).map((d) => [d.id, d]));
+      const documents = (live.documents ?? [])
+        .filter((d) => !previousDocs.has(d.id) || nextDocs.has(d.id))
+        .map((d) =>
+          nextDocs.has(d.id) &&
+          JSON.stringify(previousDocs.get(d.id)) !==
+            JSON.stringify(nextDocs.get(d.id))
+            ? structuredClone(nextDocs.get(d.id)!)
+            : d,
+        );
+      for (const d of step.documents ?? [])
+        if (
+          !documents.some((x) => x.id === d.id) &&
+          JSON.stringify(previousDocs.get(d.id)) !== JSON.stringify(d)
+        )
+          documents.push(structuredClone(d));
+      result.documents = documents.length ? documents : undefined;
+    }
+    return result;
+  });
+  // A private step on another occurrence is not removed by an unrelated template edit.
+  return [
+    ...edited,
+    ...(existing ?? []).filter(
+      (s) => !prior.has(s.id) && !edited.some((x) => x.id === s.id),
+    ),
+  ];
+}
+
+/** Apply only fields changed in this edit; never copy another date or completion state. */
+export function editAllTaskRepeat(
+  tasks: Task[],
+  instance: Task,
+  draft: Task,
+  settings: TaskRepeatSettings,
+  protectedIds = new Set<string>(),
+  before = instance,
+) {
+  const root = tasks.find((t) => t.id === instance.repeatSeriesId && t.repeat);
+  if (
+    !root?.repeat ||
+    root.deletedAt !== undefined ||
+    instance.deletedAt !== undefined
+  )
+    throw Error('Chuỗi Task đã xóa hoặc không còn hợp lệ. Chưa lưu.');
+  if (!repeatSettingsValid(settings))
+    throw Error('Chọn ngày lặp và giới hạn hợp lệ.');
+  const baseline = taskTemplate(before),
+    edited = taskTemplate(draft);
+  const changed = templateKeys.filter(
+    (k) =>
+      JSON.stringify(baseline[k as keyof TaskTemplate]) !==
+      JSON.stringify(edited[k as keyof TaskTemplate]),
+  );
+  const patch = Object.fromEntries(
+    changed.map((k) => [k, structuredClone(edited[k as keyof TaskTemplate])]),
+  );
+  const apply = <T extends TaskTemplate>(value: T, protectTime = false): T => {
+    const allowed = Object.fromEntries(
+      Object.entries(patch).filter(
+        ([k]) =>
+          !protectTime ||
+          !['timing', 'repeatSchedule', 'plannedEndTime', 'checklist'].includes(
+            k,
+          ),
+      ),
+    );
+    const next = { ...value, ...structuredClone(allowed) };
+    if (changed.includes('checklist') && !protectTime)
+      next.checklist = editSharedChecklist(
+        value.checklist,
+        before.checklist,
+        draft.checklist,
+      );
+    return next;
+  };
+  const oldSettings = repeatSettings(root, instance.repeatDate);
+  const settingsChanged =
+    JSON.stringify(oldSettings) !== JSON.stringify(settings);
+  const repeat = {
+    rules: root.repeat.rules.map((r) => ({
+      ...r,
+      ...(settingsChanged
+        ? {
+            startDate: settings.startDate,
+            days: [...settings.days],
+            enabled: settings.mode === 'weekly',
+            ending: settings.ending
+              ? structuredClone(settings.ending)
+              : undefined,
+          }
+        : {}),
+      template: taskTemplate({
+        ...apply(r.template),
+        id: 'template',
+        completed: false,
+      }),
+    })),
+  };
+  return tasks.map((t) => {
+    if (t.id === root.id)
+      return changed.length || settingsChanged ? { ...apply(t), repeat } : t;
+    if (t.repeatSeriesId !== root.id || t.deletedAt !== undefined) return t;
+    if (!changed.length && !settingsChanged && t.id !== instance.id) return t;
+    const protectedTime = t.completed || protectedIds.has(t.id);
+    const next = { ...apply(t, protectedTime) };
+    if (t.id === instance.id) {
+      if (JSON.stringify(before.checklist) !== JSON.stringify(draft.checklist))
+        next.checklist = structuredClone(draft.checklist);
+      for (const key of ['status', 'completed', 'actualOutput'] as const)
+        if (before[key] !== draft[key])
+          Object.assign(next, { [key]: draft[key] });
+      if (!protectedTime && before.plannedStart !== draft.plannedStart)
+        next.plannedStart = draft.plannedStart;
+    }
+    if (!protectedTime && changed.includes('repeatSchedule')) {
+      next.plannedStart =
+        next.repeatSchedule && next.plannedStart
+          ? `${next.plannedStart.slice(0, 10)}T${next.repeatSchedule.time}`
+          : undefined;
+    }
+    const template = repeatRule(repeat, t.repeatDate ?? '')?.template;
+    next.repeatOverride =
+      !!t.repeatOverride ||
+      JSON.stringify(taskTemplate(next)) !== JSON.stringify(template) ||
+      !!next.checklist?.some((s) => s.done) ||
+      !!next.actualOutput ||
+      next.status === 'doing';
+    return next;
+  });
 }

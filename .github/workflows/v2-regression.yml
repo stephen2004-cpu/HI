@@ -84,6 +84,7 @@ jobs:
           python3 scripts/test-deletion-installers.py
           python3 scripts/test-incremental-sync.py
           python3 scripts/test-conflict-retry.py
+          python3 scripts/test-task-series.py
       - name: Two-device sync integration
         run: npx playwright test --config=playwright.auth.config.ts
       - name: Desktop and mobile UI
